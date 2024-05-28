@@ -7,3 +7,6 @@
 [submodule "subprojects/mesa"]
 	path = subprojects/mesa
 	url = https://gitlab.freedesktop.org/mesa/mesa.git
+[submodule "subprojects/VulkanMemoryAllocator"]
+	path = subprojects/VulkanMemoryAllocator
+	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git

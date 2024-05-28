@@ -1,11 +1,11 @@
 #pragma once
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
-// #include "subprojects/glfw/include/GLFW/glfw3.h" #include "GLFW/glfw3.h>
 #include <GLFW/glfw3.h>
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
+#include <vk_mem_alloc.h>
 
 #include <array>
 #include <optional>
@@ -66,6 +66,8 @@ struct SwapChainSupportDetails {
 class Renderer {
 public:
   void run();
+  void loadGlTF(std::string path);
+
 private:
   void initWindow();
   static void framebufferResizeCallback(GLFWwindow *window, int width,
@@ -89,6 +91,7 @@ private:
                 VkDebugUtilsMessageTypeFlagsEXT messageType,
                 const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
                 void *pUserData);
+  std::vector<const char *> extensions;
   void createInstance();
   void setupDebugMessenger();
   VkSurfaceKHR surface;
@@ -125,7 +128,7 @@ private:
   VkCommandPool commandPool;
   void createCommandPool();
   VkImage depthImage;
-  VkDeviceMemory depthImageMemory;
+  VmaAllocation depthAllocation;
   VkImageView depthImageView;
   void createDepthResources();
   VkFormat findSupportedFormat(const std::vector<VkFormat> &candidates,
@@ -134,7 +137,7 @@ private:
   VkFormat findDepthFormat();
   bool hasStencilComponent(VkFormat format);
   VkImage textureImage;
-  VkDeviceMemory textureImageMemory;
+  VmaAllocation textureAllocation;
   void createTextureImage();
   VkImageView textureImageView;
   void createTextureImageView();
@@ -142,10 +145,11 @@ private:
                               VkImageAspectFlags aspectFlags);
   void createImage(uint32_t width, uint32_t height, VkFormat format,
                    VkImageTiling tiling, VkImageUsageFlags usage,
-                   VkMemoryPropertyFlags properties, VkImage &image,
-                   VkDeviceMemory &imageMemory);
+                   VmaMemoryUsage memoryUsage,
+                   VmaAllocationCreateFlags allocationFlags, VkImage &image,
+                   VmaAllocation &allocation);
   VkBuffer vertexBuffer;
-  VkDeviceMemory vertexBufferMemory;
+  VmaAllocation vertexAllocation;
   VkCommandBuffer beginSingleTimeCommands();
   void endSingleTimeCommands(VkCommandBuffer commandBuffer);
   void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
@@ -157,19 +161,20 @@ private:
   void createTextureSampler();
   void createVertexBuffer();
   VkBuffer indexBuffer;
-  VkDeviceMemory indexBufferMemory;
+  VmaAllocation indexAllocation;
   void createIndexBuffer();
   VkDescriptorPool descriptorPool;
   void createDescriptorPool();
   std::vector<VkDescriptorSet> descriptorSets;
   void createDescriptorSets();
   std::vector<VkBuffer> uniformBuffers;
-  std::vector<VkDeviceMemory> uniformBufferMemory;
+  std::vector<VmaAllocation> uniformAllocation;
   std::vector<void *> uniformBufferMapped;
   void createUniformBuffers();
   void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
-                    VkMemoryPropertyFlags properties, VkBuffer &buffer,
-                    VkDeviceMemory &bufferMemory);
+                    VmaMemoryUsage memoryUsage,
+                    VmaAllocationCreateFlags allocationFlags, VkBuffer &buffer,
+                    VmaAllocation &allocation);
   uint32_t findMemoryType(uint32_t typeFilter,
                           VkMemoryPropertyFlags properties);
   std::vector<VkCommandBuffer> commandBuffers;
@@ -189,6 +194,8 @@ private:
   VkQueue queue;
   VkQueue presentQueue;
   void createLogicalDevice();
+  VmaAllocator vmaAllocator;
+  void createVMA();
   void mainLoop();
   const size_t MAX_FRAMES_IN_FLIGHT = 2;
   void cleanupSwapChain();
