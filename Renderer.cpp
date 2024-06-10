@@ -1,4 +1,5 @@
 #include "Renderer.h"
+#include "GLFW/glfw3.h"
 
 #include <chrono>
 #include <glm/ext/matrix_transform.hpp>
@@ -13,7 +14,8 @@
 #include "tiny_gltf.h"
 
 #include <algorithm> // Necessary for std::clamp
-#include <cstdint>   // Necessary for uint32_t
+#include <cassert>
+#include <cstdint> // Necessary for uint32_t
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -22,28 +24,33 @@
 #include <set>
 #include <stdexcept>
 
-VkVertexInputBindingDescription Vertex::getBindingDescription() {
+std::vector<VkVertexInputBindingDescription> Vertex::getBindingDescriptions() {
   VkVertexInputBindingDescription bindingDescription{};
   bindingDescription.binding = 0;
   bindingDescription.stride = sizeof(Vertex);
   bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-  return bindingDescription;
+  std::vector<VkVertexInputBindingDescription> bindingDescriptions;
+  bindingDescriptions.push_back(bindingDescription);
+  return bindingDescriptions;
 }
 
-std::array<VkVertexInputAttributeDescription, 3>
+std::vector<VkVertexInputAttributeDescription>
 Vertex::getAttributeDescriptions() {
-  std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
+  std::vector<VkVertexInputAttributeDescription> attributeDescriptions{};
+  attributeDescriptions.resize(3);
+  // position attribute
   attributeDescriptions[0].binding = 0;
   attributeDescriptions[0].location = 0;
   attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
   attributeDescriptions[0].offset = offsetof(Vertex, position);
 
+  // normal attribute
   attributeDescriptions[1].binding = 0;
   attributeDescriptions[1].location = 1;
   attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-  attributeDescriptions[1].offset = offsetof(Vertex, color);
+  attributeDescriptions[1].offset = offsetof(Vertex, normal);
 
+  // texture coord attribute
   attributeDescriptions[2].binding = 0;
   attributeDescriptions[2].location = 2;
   attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
@@ -55,12 +62,11 @@ bool QueueFamilyIndices::isComplete() {
   return graphicsFamily.has_value() && presentFamily.has_value();
 }
 
-void Renderer::run() {
+void Renderer::init() {
   initWindow();
   initVulkan();
-  mainLoop();
-  cleanup();
 }
+void Renderer::destroy() { cleanup(); }
 
 void Renderer::initWindow() {
   glfwInit();
@@ -115,7 +121,9 @@ void Renderer::initVulkan() {
   createImageViews();
   createRenderPass();
   createDescriptorSetLayout();
-  createGraphicPipeline();
+  createGraphicPipeline("./shaders/shader.vert", "./shaders/shader.frag",
+                        Vertex::getBindingDescriptions(),
+                        Vertex::getAttributeDescriptions());
   createDepthResources();
   createFramebuffers();
   createCommandPool();
@@ -125,7 +133,6 @@ void Renderer::initVulkan() {
   createVertexBuffer();
   createUniformBuffers();
   createDescriptorPool();
-  createDescriptorSets();
   createIndexBuffer();
   createCommandBuffer();
   createSyncObjects();
@@ -567,7 +574,12 @@ void Renderer::createDescriptorSetLayout() {
   }
 }
 
-void Renderer::createGraphicPipeline() {
+VkPipeline Renderer::createGraphicPipeline(
+    std::string vertexShaderPath, std::string fragmentShaderPath,
+    const std::vector<VkVertexInputBindingDescription>
+        &vertexInputBindingDescriptions,
+    const std::vector<VkVertexInputAttributeDescription>
+        &vertexInputAttributeDescriptions) {
   std::vector<char> vertShaderCode = readFile("./shaders/vert.spv");
   std::vector<char> fragShaderCode = readFile("./shaders/frag.spv");
 
@@ -601,20 +613,19 @@ void Renderer::createGraphicPipeline() {
   dynamicStatepipelineDynamicStateCreateInfo.pDynamicStates =
       dynamicStates.data();
 
-  VkVertexInputBindingDescription bindingDescription =
-      Vertex::getBindingDescription();
-  auto attributeDescriptions = Vertex::getAttributeDescriptions();
-
   VkPipelineVertexInputStateCreateInfo vertexPipelineInputStateCreateInfo{};
   vertexPipelineInputStateCreateInfo.sType =
       VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-  vertexPipelineInputStateCreateInfo.vertexBindingDescriptionCount = 1;
+
+  vertexPipelineInputStateCreateInfo.vertexBindingDescriptionCount =
+      vertexInputBindingDescriptions.size();
   vertexPipelineInputStateCreateInfo.pVertexBindingDescriptions =
-      &bindingDescription;
+      vertexInputBindingDescriptions.data();
+
   vertexPipelineInputStateCreateInfo.vertexAttributeDescriptionCount =
-      static_cast<uint32_t>(attributeDescriptions.size());
+      static_cast<uint32_t>(vertexInputAttributeDescriptions.size());
   vertexPipelineInputStateCreateInfo.pVertexAttributeDescriptions =
-      attributeDescriptions.data();
+      vertexInputAttributeDescriptions.data();
 
   VkPipelineInputAssemblyStateCreateInfo pipelineInputAssemblyStateCreateInfo{};
   pipelineInputAssemblyStateCreateInfo.sType =
@@ -750,8 +761,9 @@ void Renderer::createGraphicPipeline() {
 
   vkDestroyShaderModule(device, vertShaderModule, nullptr);
   vkDestroyShaderModule(device, fragShaderModule, nullptr);
-}
 
+  return pipeline;
+}
 void Renderer::createFramebuffers() {
   swapChainFramebuffers.resize(swapChainImageViews.size());
 
@@ -1121,7 +1133,8 @@ void Renderer::createDescriptorPool() {
   }
 }
 
-void Renderer::createDescriptorSets() {
+void Renderer::createDescriptorSets(const VkImageView colorTextureImageView,
+                                    const VkSampler colorTextureSampler) {
   std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT,
                                              descriptorSetLayout);
 
@@ -1148,8 +1161,8 @@ void Renderer::createDescriptorSets() {
 
     VkDescriptorImageInfo descriptorImageInfo{};
     descriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    descriptorImageInfo.imageView = textureImageView;
-    descriptorImageInfo.sampler = textureSampler;
+    descriptorImageInfo.imageView = colorTextureImageView;
+    descriptorImageInfo.sampler = colorTextureSampler;
 
     std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
     descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1201,11 +1214,6 @@ void Renderer::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
   bufferCreateInfo.size = size;
   bufferCreateInfo.usage = usage;
   bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-  if (vkCreateBuffer(device, &bufferCreateInfo, nullptr, &buffer) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("failed to create buffer");
-  }
 
   VmaAllocationCreateInfo allocationCreateInfo{};
   allocationCreateInfo.usage = memoryUsage;
@@ -1299,6 +1307,7 @@ void Renderer::drawFrame() {
   VkResult result = vkAcquireNextImageKHR(
       device, swapchain, UINT64_MAX, imageAvailableSemaphores[currentFrame],
       VK_NULL_HANDLE, &imageIndex);
+
   if (result == VK_ERROR_OUT_OF_DATE_KHR) {
     framebufferResized = false;
     recreateSwapChain();
@@ -1306,9 +1315,14 @@ void Renderer::drawFrame() {
   } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
     throw std::runtime_error("failed to acquire swap chain image!");
   }
+
   vkResetFences(device, 1, &inFlightFences[currentFrame]);
+
   vkResetCommandBuffer(commandBuffers[currentFrame], 0);
-  recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+
+  // recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+  recordSceneCommandBuffer(commandBuffers[currentFrame], vertexDatas[0],
+                           imageIndex);
 
   updateUniformBuffer(currentFrame);
 
@@ -1480,14 +1494,12 @@ void Renderer::createVMA() {
 
   vmaCreateAllocator(&allocatorCreateInfo, &vmaAllocator);
 }
-void Renderer::mainLoop() {
-  while (!glfwWindowShouldClose(window)) {
-    glfwPollEvents();
-    drawFrame();
-  }
-  vkDeviceWaitIdle(device);
+void Renderer::loop() {
+  glfwPollEvents();
+  drawFrame();
 }
 
+bool Renderer::shouldExit() { return glfwWindowShouldClose(window); }
 void Renderer::cleanupSwapChain() {
   for (auto &framebuffer : swapChainFramebuffers) {
     vkDestroyFramebuffer(device, framebuffer, nullptr);
@@ -1517,6 +1529,8 @@ void Renderer::recreateSwapChain() {
 }
 
 void Renderer::cleanup() {
+  vkDeviceWaitIdle(device);
+
   vkDestroyImageView(device, depthImageView, nullptr);
 
   vmaDestroyImage(vmaAllocator, depthImage, depthAllocation);
@@ -1529,6 +1543,7 @@ void Renderer::cleanup() {
 
   vmaDestroyImage(vmaAllocator, textureImage, textureAllocation);
 
+  vkDestroyPipeline(device, pipeline, nullptr);
   vkDestroyPipeline(device, pipeline, nullptr);
 
   vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
@@ -1638,7 +1653,7 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance,
     func(instance, debugMessenger, pAllocator);
   }
 }
-void Renderer::loadGlTF(std::string path) {
+void Renderer::loadGLTF(std::string path) {
   tinygltf::Model model;
   tinygltf::TinyGLTF loader;
   std::string err;
@@ -1657,4 +1672,334 @@ void Renderer::loadGlTF(std::string path) {
   if (!err.empty()) {
     std::cout << "Error: " << err << std::endl;
   }
+
+  VkDeviceSize bufferSize =
+      model.buffers.at(0).data.size(); // TODO add support for several buffers
+  VkBuffer outputBuffer;
+  VmaAllocation outputAllocation;
+  int outputIndexOffset;
+  int outputCount;
+
+  VkBuffer stagingBuffer;
+  VmaAllocation stagingAllocation;
+  createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+               VMA_MEMORY_USAGE_AUTO,
+               VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                   VMA_ALLOCATION_CREATE_MAPPED_BIT,
+               stagingBuffer, stagingAllocation);
+
+  void *data;
+  vmaMapMemory(vmaAllocator, stagingAllocation, &data);
+  memcpy(data, model.buffers[0].data.data(), (size_t)bufferSize);
+  vmaUnmapMemory(vmaAllocator, stagingAllocation);
+
+  createBuffer(bufferSize,
+               VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                   VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                   VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+               VMA_MEMORY_USAGE_AUTO, 0, outputBuffer,
+               outputAllocation); // TODO add support for several buffers
+
+  copyBuffer(stagingBuffer, outputBuffer, bufferSize);
+
+  vmaDestroyBuffer(vmaAllocator, stagingBuffer, stagingAllocation);
+
+  std::vector<VkVertexInputBindingDescription> vertexInputBindingDescriptions;
+  std::vector<VkVertexInputAttributeDescription>
+      vertexInputAttributeDescriptions;
+  VkIndexType indexType;
+
+  VkBuffer stagingColorImageBuffer;
+  for (auto &mesh : model.meshes) {
+    for (auto &primitive : mesh.primitives) {
+
+      tinygltf::Accessor indexAccesor = model.accessors[primitive.indices];
+      tinygltf::BufferView indexBufferView =
+          model.bufferViews[indexAccesor.bufferView];
+
+      outputIndexOffset = indexAccesor.byteOffset + indexBufferView.byteOffset;
+      outputCount = indexAccesor.count;
+
+      if (indexAccesor.componentType ==
+          TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
+        indexType = VK_INDEX_TYPE_UINT16;
+      } else if (indexAccesor.componentType ==
+                 TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT) {
+        indexType = VK_INDEX_TYPE_UINT32;
+      }
+
+      VmaAllocation stagingColorImageAllocation;
+
+      tinygltf::Material material = model.materials[primitive.material];
+      tinygltf::Texture baseTexture =
+          model.textures[material.pbrMetallicRoughness.baseColorTexture.index];
+      tinygltf::Image baseColorImageData = model.images[baseTexture.source];
+      createBuffer(baseColorImageData.image.size(),
+                   VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_AUTO,
+                   VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                       VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                   stagingColorImageBuffer, stagingColorImageAllocation);
+
+      vmaCopyMemoryToAllocation(vmaAllocator, baseColorImageData.image.data(),
+                                stagingColorImageAllocation, 0,
+                                baseColorImageData.image.size());
+
+      VkFormat imageFormat;
+      switch (baseColorImageData.component) {
+      case 3:
+        imageFormat = VK_FORMAT_R8G8B8_SRGB;
+        break;
+      case 4:
+        imageFormat = VK_FORMAT_R8G8B8A8_SRGB;
+        break;
+      default:
+        throw std::runtime_error(
+            "Error image format not supported Loading gltf");
+      }
+      VkImage baseColorImage;
+      VmaAllocation baseColorAllocation;
+
+      createImage(baseColorImageData.width, baseColorImageData.height,
+                  imageFormat, VK_IMAGE_TILING_OPTIMAL,
+                  VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                  VMA_MEMORY_USAGE_AUTO, 0, baseColorImage,
+                  baseColorAllocation);
+
+      transitionImageLayout(baseColorImage, imageFormat,
+                            VK_IMAGE_LAYOUT_UNDEFINED,
+                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+      copyBufferImage(stagingColorImageBuffer, baseColorImage,
+                      static_cast<uint32_t>(baseColorImageData.width),
+                      static_cast<uint32_t>(baseColorImageData.height));
+
+      transitionImageLayout(baseColorImage, imageFormat,
+                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+      vmaDestroyBuffer(vmaAllocator, stagingColorImageBuffer,
+                       stagingColorImageAllocation);
+
+      VkImageView baseColorImageView = createImageView(
+          baseColorImage, imageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+
+      VkSamplerCreateInfo samplerCreateinfo{};
+      samplerCreateinfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+      samplerCreateinfo.magFilter = VK_FILTER_LINEAR;
+      samplerCreateinfo.minFilter = VK_FILTER_LINEAR;
+      samplerCreateinfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+      samplerCreateinfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+      samplerCreateinfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+
+      VkPhysicalDeviceProperties propertiesphysicalDeviceProperties{};
+      vkGetPhysicalDeviceProperties(physicalDevice,
+                                    &propertiesphysicalDeviceProperties);
+
+      samplerCreateinfo.anisotropyEnable = VK_TRUE;
+      samplerCreateinfo.maxAnisotropy =
+          propertiesphysicalDeviceProperties.limits.maxSamplerAnisotropy;
+      samplerCreateinfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+      samplerCreateinfo.unnormalizedCoordinates = VK_FALSE;
+      samplerCreateinfo.compareOp = VK_COMPARE_OP_ALWAYS;
+      samplerCreateinfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+      samplerCreateinfo.mipLodBias = 0.0f;
+      samplerCreateinfo.minLod = 0.0f;
+      samplerCreateinfo.maxLod = 0.0f;
+
+      VkSampler baseColorSampler;
+      if (vkCreateSampler(device, &samplerCreateinfo, nullptr,
+                          &baseColorSampler) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create texture sampler");
+      }
+
+      createDescriptorSets(baseColorImageView, baseColorSampler);
+
+      if (primitive.attributes.count("POSITION") >= 1) {
+
+        tinygltf::Accessor accesor =
+            model.accessors[primitive.attributes["POSITION"]];
+        tinygltf::BufferView bufferView = model.bufferViews[accesor.bufferView];
+
+        int offset = bufferView.byteOffset + accesor.byteOffset;
+
+        VkVertexInputBindingDescription vertexInputBindingDescription{};
+        vertexInputBindingDescription.binding = 0;
+        if (bufferView.byteStride == 0) {
+          vertexInputBindingDescription.stride = sizeof(float) * 3;
+        } else {
+          throw std::runtime_error("Error, tightly packed unsupported");
+        }
+        vertexInputBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        vertexInputBindingDescriptions.push_back(vertexInputBindingDescription);
+
+        VkVertexInputAttributeDescription vertexInputAttributeDescription{};
+        vertexInputAttributeDescription.binding = 0;
+        vertexInputAttributeDescription.offset = offset;
+        vertexInputAttributeDescription.format = VK_FORMAT_R32G32B32_SFLOAT;
+        vertexInputAttributeDescription.location = 0;
+        vertexInputAttributeDescriptions.push_back(
+            vertexInputAttributeDescription);
+      }
+      if (primitive.attributes.count("NORMAL") >= 1) {
+
+        tinygltf::Accessor accesor =
+            model.accessors[primitive.attributes["NORMAL"]];
+        tinygltf::BufferView bufferView = model.bufferViews[accesor.bufferView];
+
+        int offset = bufferView.byteOffset + accesor.byteOffset;
+
+        VkVertexInputBindingDescription vertexInputBindingDescription{};
+        vertexInputBindingDescription.binding = 1;
+        if (bufferView.byteStride == 0) {
+          vertexInputBindingDescription.stride = sizeof(float) * 3;
+        } else {
+          throw std::runtime_error("Error, tightly packed gltf unsupported");
+        }
+        vertexInputBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        vertexInputBindingDescriptions.push_back(vertexInputBindingDescription);
+
+        VkVertexInputAttributeDescription vertexInputAttributeDescription{};
+        vertexInputAttributeDescription.binding = 1;
+        vertexInputAttributeDescription.offset = offset;
+        vertexInputAttributeDescription.format = VK_FORMAT_R32G32B32_SFLOAT;
+        vertexInputAttributeDescription.location = 1;
+
+        vertexInputAttributeDescriptions.push_back(
+            vertexInputAttributeDescription);
+      }
+      if (primitive.attributes.count("TEXCOORD_0") >= 1) {
+
+        tinygltf::Accessor accesor =
+            model.accessors[primitive.attributes["TEXCOORD_0"]];
+        tinygltf::BufferView bufferView = model.bufferViews[accesor.bufferView];
+
+        int offset = bufferView.byteOffset + accesor.byteOffset;
+
+        VkVertexInputBindingDescription vertexInputBindingDescription{};
+        vertexInputBindingDescription.binding = 2;
+        if (bufferView.byteStride == 0) {
+          vertexInputBindingDescription.stride = sizeof(float) * 2;
+        } else {
+          throw std::runtime_error("Error, tightly packed unsupported");
+        }
+        vertexInputBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        vertexInputBindingDescriptions.push_back(vertexInputBindingDescription);
+
+        VkVertexInputAttributeDescription vertexInputAttributeDescription{};
+        vertexInputAttributeDescription.binding = 2;
+        vertexInputAttributeDescription.offset = offset;
+        vertexInputAttributeDescription.format = VK_FORMAT_R32G32_SFLOAT;
+        vertexInputAttributeDescription.location = 2;
+
+        vertexInputAttributeDescriptions.push_back(
+            vertexInputAttributeDescription);
+      }
+      if (primitive.attributes.count("TANGENT") >= 1) {
+
+        tinygltf::Accessor accesor =
+            model.accessors[primitive.attributes["TANGENT"]];
+        tinygltf::BufferView bufferView = model.bufferViews[accesor.bufferView];
+
+        int offset = bufferView.byteOffset + accesor.byteOffset;
+
+        VkVertexInputBindingDescription vertexInputBindingDescription{};
+        vertexInputBindingDescription.binding = 3;
+        if (bufferView.byteStride == 0) {
+          vertexInputBindingDescription.stride = sizeof(float) * 4;
+        } else {
+          throw std::runtime_error("Error, tightly packed unsupported");
+        }
+        vertexInputBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        vertexInputBindingDescriptions.push_back(vertexInputBindingDescription);
+
+        VkVertexInputAttributeDescription vertexInputAttributeDescription{};
+        vertexInputAttributeDescription.binding = 3;
+        vertexInputAttributeDescription.offset = offset;
+        vertexInputAttributeDescription.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+        vertexInputAttributeDescription.location = 3;
+
+        vertexInputAttributeDescriptions.push_back(
+            vertexInputAttributeDescription);
+      }
+    }
+  }
+  VkPipeline pipeline = createGraphicPipeline(
+      "./shaders/modelShader.vert", "./shaders/modelShader.frag",
+      vertexInputBindingDescriptions, vertexInputAttributeDescriptions);
+
+  vertexDatas.push_back(VertexData(outputBuffer, outputAllocation, pipeline,
+                                   outputIndexOffset, outputCount, indexType));
 }
+void Renderer::recordSceneCommandBuffer(const VkCommandBuffer &commandBuffer,
+                                        const VertexData &vertexData,
+                                        const uint32_t imageIndex) {
+  VkCommandBufferBeginInfo commandBufferBeginInfo{};
+  commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBeginInfo.flags = 0;                  // Optional
+  commandBufferBeginInfo.pInheritanceInfo = nullptr; // Optional
+
+  if (vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo) !=
+      VK_SUCCESS) {
+    throw std::runtime_error("failed to begin recording command buffer");
+  }
+  VkRenderPassBeginInfo renderPassBeginInfo{};
+  renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  renderPassBeginInfo.renderPass = renderPass;
+  renderPassBeginInfo.framebuffer = swapChainFramebuffers[imageIndex];
+  renderPassBeginInfo.renderArea.offset = {0, 0};
+  renderPassBeginInfo.renderArea.extent = swapChainExtent;
+
+  std::array<VkClearValue, 2> clearValues{};
+  clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+  clearValues[1].depthStencil = {1.0f, 0};
+
+  renderPassBeginInfo.pClearValues = clearValues.data();
+  renderPassBeginInfo.clearValueCount =
+      static_cast<uint32_t>(clearValues.size());
+
+  vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo,
+                       VK_SUBPASS_CONTENTS_INLINE);
+
+  vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    vertexData.m_pipeline);
+
+  VkBuffer vertexBuffers[] = {vertexData.m_buffer, vertexData.m_buffer,
+                              vertexData.m_buffer};
+  VkDeviceSize offsets[] = {0, 0, 0};
+
+  vkCmdBindVertexBuffers(commandBuffer, 0, 3, vertexBuffers, offsets);
+  vkCmdBindIndexBuffer(commandBuffer, vertexData.m_buffer,
+                       vertexData.m_indexOffset, VK_INDEX_TYPE_UINT16);
+
+  VkViewport viewport{};
+  viewport.x = 0.0f;
+  viewport.y = 0.0f;
+  viewport.width = static_cast<float>(swapChainExtent.width);
+  viewport.height = static_cast<float>(swapChainExtent.height);
+  viewport.minDepth = 0.0f;
+  viewport.maxDepth = 1.0f;
+
+  vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+  VkRect2D scissor{};
+  scissor.offset = {0, 0};
+  scissor.extent = swapChainExtent;
+  vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+  vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          pipelineLayout, 0, 1, &descriptorSets[currentFrame],
+                          0, nullptr);
+
+  vkCmdDrawIndexed(commandBuffer, vertexData.m_count, 1, 0, 0, 0);
+
+  vkCmdEndRenderPass(commandBuffer);
+
+  if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+    throw std::runtime_error("failed to record command buffer");
+  }
+}
+VertexData::VertexData(const VkBuffer &buffer, const VmaAllocation &allocation,
+                       const VkPipeline &pipeline, const uint32_t indexOffset,
+                       const uint32_t count, const VkIndexType &indexType)
+    : m_buffer(buffer), m_allocation(allocation), m_pipeline(pipeline),
+      m_indexOffset(indexOffset), m_count(count), m_indexType(indexType) {}

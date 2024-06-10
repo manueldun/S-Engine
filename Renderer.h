@@ -7,7 +7,6 @@
 #include <glm/glm.hpp>
 #include <vk_mem_alloc.h>
 
-#include <array>
 #include <optional>
 #include <string>
 #include <vector>
@@ -20,13 +19,28 @@ struct UniformBufferObject {
 
 struct Vertex {
   glm::vec3 position;
-  glm::vec3 color;
+  glm::vec3 normal;
   glm::vec2 texCoord;
-  static VkVertexInputBindingDescription getBindingDescription();
-  static std::array<VkVertexInputAttributeDescription, 3>
+  static std::vector<VkVertexInputBindingDescription> getBindingDescriptions();
+  static std::vector<VkVertexInputAttributeDescription>
   getAttributeDescriptions();
 };
+class VertexData {
+public:
+  friend class Renderer;
+  VertexData() = delete;
+  VertexData(const VkBuffer &buffer, const VmaAllocation &allocation,
+             const VkPipeline &pipeline, const uint32_t indexOffset,
+             const uint32_t count, const VkIndexType &indexType);
 
+private:
+  const VkBuffer m_buffer;
+  const VmaAllocation m_allocation;
+  const VkPipeline m_pipeline;
+  const uint32_t m_indexOffset;
+  const uint32_t m_count;
+  const VkIndexType m_indexType;
+};
 const std::vector<Vertex> vertices = {
     {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
     {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
@@ -65,8 +79,11 @@ struct SwapChainSupportDetails {
 
 class Renderer {
 public:
-  void run();
-  void loadGlTF(std::string path);
+  void loadGLTF(std::string path);
+  void init();
+  void loop();
+  void destroy();
+  bool shouldExit();
 
 private:
   void initWindow();
@@ -98,7 +115,8 @@ private:
   void createSurface();
   void pickPhysicalDevice();
   const std::vector<const char *> deviceExtensions = {
-      VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+      VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME};
   bool isDeviceSuitable(VkPhysicalDevice device);
   VkSurfaceFormatKHR chooseSwapSurfaceFormat(
       const std::vector<VkSurfaceFormatKHR> &availableFormats);
@@ -119,10 +137,17 @@ private:
   VkDescriptorSetLayout descriptorSetLayout;
   void createDescriptorSetLayout();
   VkPipeline pipeline;
+  VkPipeline loadedPipeline;
   VkPipelineLayout pipelineLayout;
   std::vector<VkImageView> swapChainImageViews;
   VkRenderPass renderPass;
-  void createGraphicPipeline();
+  VkPipeline
+  createGraphicPipeline(std::string vertexShaderPath,
+                        std::string fragmentShaderPath,
+                        const std::vector<VkVertexInputBindingDescription>
+                            &vertexInpitBindingDescription,
+                        const std::vector<VkVertexInputAttributeDescription>
+                            &vertexInputAttributeDescription);
   std::vector<VkFramebuffer> swapChainFramebuffers;
   void createFramebuffers();
   VkCommandPool commandPool;
@@ -166,7 +191,8 @@ private:
   VkDescriptorPool descriptorPool;
   void createDescriptorPool();
   std::vector<VkDescriptorSet> descriptorSets;
-  void createDescriptorSets();
+  void createDescriptorSets(const VkImageView colorTextureImageView,
+                            const VkSampler colorTextureSampler);
   std::vector<VkBuffer> uniformBuffers;
   std::vector<VmaAllocation> uniformAllocation;
   std::vector<void *> uniformBufferMapped;
@@ -188,6 +214,9 @@ private:
   void updateUniformBuffer(uint32_t currentImage);
   void drawFrame();
   void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageindex);
+  void recordSceneCommandBuffer(const VkCommandBuffer &commandBuffer,
+                                const VertexData &vertexData,
+                                const uint32_t imageIndex);
   VkInstance instance;
   VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
   VkDevice device;
@@ -196,9 +225,9 @@ private:
   void createLogicalDevice();
   VmaAllocator vmaAllocator;
   void createVMA();
-  void mainLoop();
   const size_t MAX_FRAMES_IN_FLIGHT = 2;
   void cleanupSwapChain();
   void recreateSwapChain();
   void cleanup();
+  std::vector<VertexData> vertexDatas;
 };
