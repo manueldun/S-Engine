@@ -1,4 +1,5 @@
 #pragma once
+#include "glm/fwd.hpp"
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -25,21 +26,65 @@ struct Vertex {
   static std::vector<VkVertexInputAttributeDescription>
   getAttributeDescriptions();
 };
-class VertexData {
+class MemoryData {
 public:
   friend class Renderer;
-  VertexData() = delete;
-  VertexData(const VkBuffer &buffer, const VmaAllocation &allocation,
-             const VkPipeline &pipeline, const uint32_t indexOffset,
-             const uint32_t count, const VkIndexType &indexType);
+  MemoryData() = delete;
+  MemoryData(const VkBuffer &buffer, const VmaAllocation &allocation);
 
 private:
   const VkBuffer m_buffer;
   const VmaAllocation m_allocation;
+};
+class Texture {
+public:
+  friend class Renderer;
+  Texture() = delete;
+  Texture(const VkImage &image, const VkImageView &imageView,
+          const VmaAllocation &allocation, const VkSampler &sampler,
+          const std::vector<VkDescriptorSet> descriptorSet);
+  void clean(const VkDevice &device, const VmaAllocator &allocator);
+
+private:
+  const VkImage m_image;
+  const VkImageView m_imageView;
+  const VmaAllocation m_allocation;
+  const VkSampler m_sampler;
+  const std::vector<VkDescriptorSet> m_descriptorSet;
+};
+
+class Drawble {
+public:
+  friend class Renderer;
+  Drawble() = delete;
+  Drawble(const uint32_t &indexToIndexBuffer,
+          const std::vector<uint32_t> &indexToVertexBuffers,
+          const VkPipeline &pipeline, const uint32_t indexOffset,
+          const uint32_t count, const VkIndexType &indexType,
+          const uint32_t &indexToTexture);
+  std::string getName();
+
+private:
+  const uint32_t m_indexToIndexBuffer;
+  const std::vector<uint32_t> m_indexToVertexBuffers;
   const VkPipeline m_pipeline;
   const uint32_t m_indexOffset;
   const uint32_t m_count;
   const VkIndexType m_indexType;
+  const uint32_t m_indexToTexture;
+};
+class Node {
+public:
+  friend class renderer;
+  Node() = delete;
+  Node(const std::string name, const std::vector<Drawble> drawbles,
+       const glm::mat4 initialMatrix);
+  const glm::mat4 getInitialMatrix();
+
+private:
+  const glm::mat4 m_initialMatrix;
+  const std::string m_name;
+  std::vector<Drawble> m_drawbles;
 };
 const std::vector<Vertex> vertices = {
     {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
@@ -76,10 +121,11 @@ struct SwapChainSupportDetails {
   std::vector<VkSurfaceFormatKHR> formats;
   std::vector<VkPresentModeKHR> presentModes;
 };
-
+class RenderObject;
 class Renderer {
 public:
-  void loadGLTF(std::string path);
+  Renderer();
+  RenderObject loadGLTF(std::string path);
   void init();
   void loop();
   void destroy();
@@ -134,8 +180,15 @@ private:
   void createImageViews();
   VkShaderModule createShaderModule(const std::vector<char> &code);
   void createRenderPass();
-  VkDescriptorSetLayout descriptorSetLayout;
-  void createDescriptorSetLayout();
+  VkDescriptorPool m_firstDescriptorPool;
+  void createDescriptorPool();
+  VkDescriptorSetLayout m_uboDescriptorSetLayout;
+  VkDescriptorSetLayout m_textureDescriptorSetLayout;
+  void createDescriptorSetLayouts();
+  std::vector<VkDescriptorSet> m_uboDescriptorSets;
+  void allocateUboDescriptorSets();
+  std::vector<VkDescriptorSet>
+  allocateTextureDescriptorSet(VkImageView imageview, VkSampler sampler);
   VkPipeline pipeline;
   VkPipeline loadedPipeline;
   VkPipelineLayout pipelineLayout;
@@ -188,14 +241,9 @@ private:
   VkBuffer indexBuffer;
   VmaAllocation indexAllocation;
   void createIndexBuffer();
-  VkDescriptorPool descriptorPool;
-  void createDescriptorPool();
-  std::vector<VkDescriptorSet> descriptorSets;
-  void createDescriptorSets(const VkImageView colorTextureImageView,
-                            const VkSampler colorTextureSampler);
-  std::vector<VkBuffer> uniformBuffers;
-  std::vector<VmaAllocation> uniformAllocation;
-  std::vector<void *> uniformBufferMapped;
+  std::vector<VkBuffer> m_uboBuffer;
+  std::vector<VmaAllocation> m_uboAllocation;
+  std::vector<void *> m_uniformBufferMapped;
   void createUniformBuffers();
   void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
                     VmaMemoryUsage memoryUsage,
@@ -209,13 +257,12 @@ private:
   std::vector<VkSemaphore> renderFinishedSemaphores;
   std::vector<VkFence> inFlightFences;
   void createSyncObjects();
-  uint32_t currentFrame = 0;
+  uint32_t m_currentFrame = 0;
   bool framebufferResized = false;
   void updateUniformBuffer(uint32_t currentImage);
   void drawFrame();
   void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageindex);
   void recordSceneCommandBuffer(const VkCommandBuffer &commandBuffer,
-                                const VertexData &vertexData,
                                 const uint32_t imageIndex);
   VkInstance instance;
   VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
@@ -229,5 +276,25 @@ private:
   void cleanupSwapChain();
   void recreateSwapChain();
   void cleanup();
-  std::vector<VertexData> vertexDatas;
+  std::vector<Node> m_nodes;
+  std::vector<Drawble> m_drawbles;
+  std::vector<MemoryData> m_loadedMemoryData;
+  std::vector<Texture> m_loadedTextures;
+  std::vector<glm::mat4> m_modelMatrices;
+  uint32_t addModelMatrix(const glm::mat4 matrix);
+  void setMatrix(const uint32_t index, const glm::mat4 matrix);
+  void resizeDescriptorSets();
+  friend class RenderObject;
+};
+class RenderObject {
+public:
+  RenderObject() = delete;
+  RenderObject(Renderer &renderer, const glm::mat4 initialMatrix);
+  void setMatrix(const glm::mat4 matrix);
+  RenderObject(const RenderObject &other) = default;
+
+private:
+  uint32_t m_index = 0;
+  Renderer &m_renderer;
+  const glm::mat4 m_initialMatrix;
 };
