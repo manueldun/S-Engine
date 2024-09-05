@@ -1507,39 +1507,6 @@ RenderObject Renderer::loadGLTF(std::string path) {
   if (!err.empty()) {
     std::cout << "Error: " << err << std::endl;
   }
-  m_loadedMemoryData.reserve(model.buffers.size() + m_loadedMemoryData.size());
-
-  for (auto &buffer : model.buffers) {
-
-    VkDeviceSize bufferSize = buffer.data.size();
-    VkBuffer outputBuffer;
-    VmaAllocation outputAllocation;
-
-    VkBuffer stagingBuffer;
-    VmaAllocation stagingAllocation;
-    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                 VMA_MEMORY_USAGE_AUTO,
-                 VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                     VMA_ALLOCATION_CREATE_MAPPED_BIT,
-                 stagingBuffer, stagingAllocation);
-
-    void *data;
-    vmaMapMemory(vmaAllocator, stagingAllocation, &data);
-    memcpy(data, buffer.data.data(), (size_t)bufferSize);
-    vmaUnmapMemory(vmaAllocator, stagingAllocation);
-
-    createBuffer(bufferSize,
-                 VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                     VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-                     VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                 VMA_MEMORY_USAGE_AUTO, 0, outputBuffer,
-                 outputAllocation); // TODO add support for several buffers
-
-    copyBuffer(stagingBuffer, outputBuffer, bufferSize);
-
-    vmaDestroyBuffer(vmaAllocator, stagingBuffer, stagingAllocation);
-    m_loadedMemoryData.push_back(MemoryData(outputBuffer, outputAllocation));
-  }
 
   m_loadedTextures.reserve(model.images.size() + m_loadedTextures.size());
 
@@ -1631,8 +1598,6 @@ RenderObject Renderer::loadGLTF(std::string path) {
 
   uint32_t outputIndexOffset;
   uint32_t outputCount;
-  uint32_t outputIndexBufferIndex;
-  std::vector<uint32_t> outputBuffersIndex;
 
   std::vector<VkVertexInputBindingDescription> vertexInputBindingDescriptions;
   std::vector<VkVertexInputAttributeDescription>
@@ -1643,14 +1608,47 @@ RenderObject Renderer::loadGLTF(std::string path) {
     tinygltf::Mesh mesh = model.meshes.at(node.mesh);
     for (auto &primitive : mesh.primitives) {
 
+      BufferData bufferData{};
+
       tinygltf::Accessor indexAccesor = model.accessors[primitive.indices];
       tinygltf::BufferView indexBufferView =
           model.bufferViews[indexAccesor.bufferView];
 
-      outputIndexOffset = indexAccesor.byteOffset + indexBufferView.byteOffset;
+      outputIndexOffset = indexAccesor.byteOffset;
       outputCount = indexAccesor.count;
-      outputIndexBufferIndex =
-          indexBufferView.buffer + m_loadedMemoryData.size() - 1;
+
+      VkDeviceSize bufferSize = indexBufferView.byteLength;
+      VkBuffer outputIndexBuffer;
+      VmaAllocation outputIndexAllocation;
+
+      VkBuffer stagingBuffer;
+      VmaAllocation stagingAllocation;
+      createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                   VMA_MEMORY_USAGE_AUTO,
+                   VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                       VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                   stagingBuffer, stagingAllocation);
+
+      void *data;
+      std::vector<unsigned char> buffer =
+          model.buffers.at(indexBufferView.buffer).data;
+
+      vmaMapMemory(vmaAllocator, stagingAllocation, &data);
+      memcpy(data, buffer.data() + indexBufferView.byteOffset,
+             (size_t)bufferSize);
+      vmaUnmapMemory(vmaAllocator, stagingAllocation);
+
+      createBuffer(
+          bufferSize,
+          VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+          VMA_MEMORY_USAGE_AUTO, 0, outputIndexBuffer, outputIndexAllocation);
+
+      copyBuffer(stagingBuffer, outputIndexBuffer, bufferSize);
+
+      vmaDestroyBuffer(vmaAllocator, stagingBuffer, stagingAllocation);
+
+      bufferData.indexBuffer = outputIndexBuffer;
+      bufferData.indexAllocation = outputIndexAllocation;
 
       if (indexAccesor.componentType ==
           TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
@@ -1671,9 +1669,40 @@ RenderObject Renderer::loadGLTF(std::string path) {
             model.accessors[primitive.attributes["POSITION"]];
         tinygltf::BufferView bufferView = model.bufferViews[accesor.bufferView];
 
-        int offset = bufferView.byteOffset + accesor.byteOffset;
-        outputBuffersIndex.push_back(bufferView.buffer +
-                                     m_loadedMemoryData.size() - 1);
+        VkDeviceSize bufferSize = bufferView.byteLength;
+        VkBuffer outputBuffer;
+        VmaAllocation outputAllocation;
+
+        VkBuffer stagingBuffer;
+        VmaAllocation stagingAllocation;
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                     VMA_MEMORY_USAGE_AUTO,
+                     VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                         VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                     stagingBuffer, stagingAllocation);
+
+        void *data;
+        std::vector<unsigned char> dataBuffer =
+            model.buffers.at(indexBufferView.buffer).data;
+
+        vmaMapMemory(vmaAllocator, stagingAllocation, &data);
+        memcpy(data, dataBuffer.data() + indexBufferView.byteOffset,
+               (size_t)bufferSize);
+        vmaUnmapMemory(vmaAllocator, stagingAllocation);
+
+        createBuffer(bufferSize,
+                     VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                     VMA_MEMORY_USAGE_AUTO, 0, outputBuffer, outputAllocation);
+
+        copyBuffer(stagingBuffer, outputBuffer, bufferSize);
+
+        vmaDestroyBuffer(vmaAllocator, stagingBuffer, stagingAllocation);
+
+        bufferData.positionBuffer = outputBuffer;
+        bufferData.positionAllocation = outputAllocation;
+
+        int offset = accesor.byteOffset;
 
         VkVertexInputBindingDescription vertexInputBindingDescription{};
         vertexInputBindingDescription.binding = 0;
@@ -1699,9 +1728,40 @@ RenderObject Renderer::loadGLTF(std::string path) {
             model.accessors[primitive.attributes["NORMAL"]];
         tinygltf::BufferView bufferView = model.bufferViews[accesor.bufferView];
 
-        int offset = bufferView.byteOffset + accesor.byteOffset;
-        outputBuffersIndex.push_back(bufferView.buffer +
-                                     m_loadedMemoryData.size() - 1);
+        VkDeviceSize bufferSize = bufferView.byteLength;
+        VkBuffer outputBuffer;
+        VmaAllocation outputAllocation;
+
+        VkBuffer stagingBuffer;
+        VmaAllocation stagingAllocation;
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                     VMA_MEMORY_USAGE_AUTO,
+                     VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                         VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                     stagingBuffer, stagingAllocation);
+
+        void *data;
+        std::vector<unsigned char> dataBuffer =
+            model.buffers.at(indexBufferView.buffer).data;
+
+        vmaMapMemory(vmaAllocator, stagingAllocation, &data);
+        memcpy(data, dataBuffer.data() + indexBufferView.byteOffset,
+               (size_t)bufferSize);
+        vmaUnmapMemory(vmaAllocator, stagingAllocation);
+
+        createBuffer(bufferSize,
+                     VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                     VMA_MEMORY_USAGE_AUTO, 0, outputBuffer, outputAllocation);
+
+        copyBuffer(stagingBuffer, outputBuffer, bufferSize);
+
+        vmaDestroyBuffer(vmaAllocator, stagingBuffer, stagingAllocation);
+
+        bufferData.normalBuffer = outputBuffer;
+        bufferData.normalAllocation = outputAllocation;
+
+        int offset = accesor.byteOffset;
 
         VkVertexInputBindingDescription vertexInputBindingDescription{};
         vertexInputBindingDescription.binding = 1;
@@ -1728,9 +1788,40 @@ RenderObject Renderer::loadGLTF(std::string path) {
             model.accessors[primitive.attributes["TEXCOORD_0"]];
         tinygltf::BufferView bufferView = model.bufferViews[accesor.bufferView];
 
-        uint32_t offset = bufferView.byteOffset + accesor.byteOffset;
-        outputBuffersIndex.push_back(bufferView.buffer +
-                                     m_loadedMemoryData.size() - 1);
+        VkDeviceSize bufferSize = bufferView.byteLength;
+        VkBuffer outputBuffer;
+        VmaAllocation outputAllocation;
+
+        VkBuffer stagingBuffer;
+        VmaAllocation stagingAllocation;
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                     VMA_MEMORY_USAGE_AUTO,
+                     VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                         VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                     stagingBuffer, stagingAllocation);
+
+        void *data;
+        std::vector<unsigned char> dataBuffer =
+            model.buffers.at(indexBufferView.buffer).data;
+
+        vmaMapMemory(vmaAllocator, stagingAllocation, &data);
+        memcpy(data, dataBuffer.data() + indexBufferView.byteOffset,
+               (size_t)bufferSize);
+        vmaUnmapMemory(vmaAllocator, stagingAllocation);
+
+        createBuffer(bufferSize,
+                     VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                     VMA_MEMORY_USAGE_AUTO, 0, outputBuffer, outputAllocation);
+
+        copyBuffer(stagingBuffer, outputBuffer, bufferSize);
+
+        vmaDestroyBuffer(vmaAllocator, stagingBuffer, stagingAllocation);
+
+        bufferData.texCoordBuffer = outputBuffer;
+        bufferData.texCoordAllocation = outputAllocation;
+
+        uint32_t offset = accesor.byteOffset;
 
         VkVertexInputBindingDescription vertexInputBindingDescription{};
         vertexInputBindingDescription.binding = 2;
@@ -1757,9 +1848,40 @@ RenderObject Renderer::loadGLTF(std::string path) {
             model.accessors[primitive.attributes["TANGENT"]];
         tinygltf::BufferView bufferView = model.bufferViews[accesor.bufferView];
 
-        int offset = bufferView.byteOffset + accesor.byteOffset;
-        outputBuffersIndex.push_back(bufferView.buffer +
-                                     m_loadedMemoryData.size() - 1);
+        VkDeviceSize bufferSize = bufferView.byteLength;
+        VkBuffer outputBuffer;
+        VmaAllocation outputAllocation;
+
+        VkBuffer stagingBuffer;
+        VmaAllocation stagingAllocation;
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                     VMA_MEMORY_USAGE_AUTO,
+                     VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                         VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                     stagingBuffer, stagingAllocation);
+
+        void *data;
+        std::vector<unsigned char> dataBuffer =
+            model.buffers.at(indexBufferView.buffer).data;
+
+        vmaMapMemory(vmaAllocator, stagingAllocation, &data);
+        memcpy(data, dataBuffer.data() + indexBufferView.byteOffset,
+               (size_t)bufferSize);
+        vmaUnmapMemory(vmaAllocator, stagingAllocation);
+
+        createBuffer(bufferSize,
+                     VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                     VMA_MEMORY_USAGE_AUTO, 0, outputBuffer, outputAllocation);
+
+        copyBuffer(stagingBuffer, outputBuffer, bufferSize);
+
+        vmaDestroyBuffer(vmaAllocator, stagingBuffer, stagingAllocation);
+
+        bufferData.tangentbuffer = outputBuffer;
+        bufferData.tangentAllocation = outputAllocation;
+
+        int offset = accesor.byteOffset;
 
         VkVertexInputBindingDescription vertexInputBindingDescription{};
         vertexInputBindingDescription.binding = 3;
@@ -1788,9 +1910,8 @@ RenderObject Renderer::loadGLTF(std::string path) {
           "./shaders/modelShader.vert", "./shaders/modelShader.frag",
           vertexInputBindingDescriptions, vertexInputAttributeDescriptions);
 
-      m_drawbles.push_back(Drawble(outputIndexBufferIndex, outputBuffersIndex,
-                                   pipeline, outputIndexOffset, outputCount,
-                                   indexType, outputIndexTexture));
+      m_drawbles.push_back(Drawble(bufferData, pipeline, outputIndexOffset,
+                                   outputCount, indexType, outputIndexTexture));
     }
     glm::mat4 initialMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f),
                                           glm::vec3(1.0f, 0.0f, 0.0f));
@@ -1842,25 +1963,22 @@ void Renderer::recordSceneCommandBuffer(const VkCommandBuffer &commandBuffer,
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                       m_drawbles.at(drawbleIndex).m_pipeline);
 
-    const uint32_t numOfAttributes =
-        m_drawbles.at(drawbleIndex).m_indexToVertexBuffers.size();
-    std::vector<VkBuffer> buffers(numOfAttributes);
+    VkBuffer positionBuffer =
+        m_drawbles.at(drawbleIndex).m_bufferData.positionBuffer;
+    VkBuffer normalBuffer =
+        m_drawbles.at(drawbleIndex).m_bufferData.normalBuffer;
+    VkBuffer coordtexBuffer =
+        m_drawbles.at(drawbleIndex).m_bufferData.texCoordBuffer;
 
-    for (size_t i = 0; i < numOfAttributes; i++) {
-      buffers.at(i) =
-          m_loadedMemoryData
-              .at(m_drawbles.at(drawbleIndex).m_indexToVertexBuffers.at(i))
-              .m_buffer;
-    }
-    std::vector<VkDeviceSize> offsets(numOfAttributes, 0);
+    std::array<VkBuffer, 3> buffers = {positionBuffer, normalBuffer,
+                                       coordtexBuffer};
+    std::array<VkDeviceSize, 3> offsets = {0, 0, 0};
 
-    vkCmdBindVertexBuffers(commandBuffer, 0, numOfAttributes, buffers.data(),
+    vkCmdBindVertexBuffers(commandBuffer, 0, buffers.size(), buffers.data(),
                            offsets.data());
-    vkCmdBindIndexBuffer(
-        commandBuffer,
-        m_loadedMemoryData.at(m_drawbles.at(drawbleIndex).m_indexToIndexBuffer)
-            .m_buffer,
-        m_drawbles.at(drawbleIndex).m_indexOffset, VK_INDEX_TYPE_UINT16);
+
+    VkBuffer indexBuffer = m_drawbles.at(drawbleIndex).m_bufferData.indexBuffer;
+    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -1898,13 +2016,10 @@ void Renderer::recordSceneCommandBuffer(const VkCommandBuffer &commandBuffer,
     throw std::runtime_error("failed to record command buffer");
   }
 }
-Drawble::Drawble(const uint32_t &indexToIndexBuffer,
-                 const std::vector<uint32_t> &indexToVertexBuffers,
-                 const VkPipeline &pipeline, const uint32_t indexOffset,
-                 const uint32_t count, const VkIndexType &indexType,
-                 const uint32_t &indexToTexture)
-    : m_indexToIndexBuffer(indexToIndexBuffer),
-      m_indexToVertexBuffers(indexToVertexBuffers), m_pipeline(pipeline),
+Drawble::Drawble(const BufferData &bufferData, const VkPipeline &pipeline,
+                 const uint32_t indexOffset, const uint32_t count,
+                 const VkIndexType &indexType, const uint32_t &indexToTexture)
+    : m_bufferData(bufferData), m_pipeline(pipeline),
       m_indexOffset(indexOffset), m_count(count), m_indexType(indexType),
       m_indexToTexture(indexToTexture)
 

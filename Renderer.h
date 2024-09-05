@@ -26,6 +26,22 @@ struct Vertex {
   static std::vector<VkVertexInputAttributeDescription>
   getAttributeDescriptions();
 };
+struct BufferData {
+  VkBuffer indexBuffer;
+  VmaAllocation indexAllocation;
+
+  VkBuffer positionBuffer;
+  VmaAllocation positionAllocation;
+
+  VkBuffer texCoordBuffer;
+  VmaAllocation texCoordAllocation;
+
+  VkBuffer normalBuffer;
+  VmaAllocation normalAllocation;
+
+  VkBuffer tangentbuffer;
+  VmaAllocation tangentAllocation;
+};
 class MemoryData {
 public:
   friend class Renderer;
@@ -57,16 +73,13 @@ class Drawble {
 public:
   friend class Renderer;
   Drawble() = delete;
-  Drawble(const uint32_t &indexToIndexBuffer,
-          const std::vector<uint32_t> &indexToVertexBuffers,
-          const VkPipeline &pipeline, const uint32_t indexOffset,
-          const uint32_t count, const VkIndexType &indexType,
-          const uint32_t &indexToTexture);
+  Drawble(const BufferData &bufferData, const VkPipeline &pipeline,
+          const uint32_t indexOffset, const uint32_t count,
+          const VkIndexType &indexType, const uint32_t &indexToTexture);
   std::string getName();
 
 private:
-  const uint32_t m_indexToIndexBuffer;
-  const std::vector<uint32_t> m_indexToVertexBuffers;
+  const BufferData m_bufferData;
   const VkPipeline m_pipeline;
   const uint32_t m_indexOffset;
   const uint32_t m_count;
@@ -278,7 +291,7 @@ private:
   void cleanup();
   std::vector<Node> m_nodes;
   std::vector<Drawble> m_drawbles;
-  std::vector<MemoryData> m_loadedMemoryData;
+  std::vector<BufferData> m_loadedBufferData;
   std::vector<Texture> m_loadedTextures;
   std::vector<glm::mat4> m_modelMatrices;
   uint32_t addModelMatrix(const glm::mat4 matrix);
