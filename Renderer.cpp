@@ -1699,8 +1699,7 @@ RenderObject Renderer::loadGLTF(std::string path) {
 
         vmaMapMemory(vmaAllocator, stagingAllocation, &data);
         memcpy(data,
-               dataBuffer.data() + indexBufferView.byteOffset +
-                   accesor.byteOffset,
+               dataBuffer.data() + bufferView.byteOffset + accesor.byteOffset,
                (size_t)bufferSize);
         vmaUnmapMemory(vmaAllocator, stagingAllocation);
 
@@ -1760,8 +1759,7 @@ RenderObject Renderer::loadGLTF(std::string path) {
 
         vmaMapMemory(vmaAllocator, stagingAllocation, &data);
         memcpy(data,
-               dataBuffer.data() + indexBufferView.byteOffset +
-                   accesor.byteOffset,
+               dataBuffer.data() + bufferView.byteOffset + accesor.byteOffset,
                (size_t)bufferSize);
         vmaUnmapMemory(vmaAllocator, stagingAllocation);
 
@@ -1822,8 +1820,7 @@ RenderObject Renderer::loadGLTF(std::string path) {
 
         vmaMapMemory(vmaAllocator, stagingAllocation, &data);
         memcpy(data,
-               dataBuffer.data() + indexBufferView.byteOffset +
-                   accesor.byteOffset,
+               dataBuffer.data() + bufferView.byteOffset + accesor.byteOffset,
                (size_t)bufferSize);
         vmaUnmapMemory(vmaAllocator, stagingAllocation);
 
@@ -1884,8 +1881,7 @@ RenderObject Renderer::loadGLTF(std::string path) {
 
         vmaMapMemory(vmaAllocator, stagingAllocation, &data);
         memcpy(data,
-               dataBuffer.data() + indexBufferView.byteOffset +
-                   accesor.byteOffset,
+               dataBuffer.data() + bufferView.byteOffset + accesor.byteOffset,
                (size_t)bufferSize);
         vmaUnmapMemory(vmaAllocator, stagingAllocation);
 
