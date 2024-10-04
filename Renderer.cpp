@@ -1630,11 +1630,13 @@ RenderObject Renderer::loadGLTF(std::string path) {
                    stagingBuffer, stagingAllocation);
 
       void *data;
-      std::vector<unsigned char> buffer =
+      std::vector<unsigned char> &buffer =
           model.buffers.at(indexBufferView.buffer).data;
 
       vmaMapMemory(vmaAllocator, stagingAllocation, &data);
-      memcpy(data, buffer.data() + indexBufferView.byteOffset,
+      memcpy(data,
+             buffer.data() + indexBufferView.byteOffset +
+                 indexAccesor.byteOffset,
              (size_t)bufferSize);
       vmaUnmapMemory(vmaAllocator, stagingAllocation);
 
@@ -1658,10 +1660,20 @@ RenderObject Renderer::loadGLTF(std::string path) {
         indexType = VK_INDEX_TYPE_UINT32;
       }
 
-      tinygltf::Material material = model.materials[primitive.material];
-      tinygltf::Texture baseTexture =
-          model.textures[material.pbrMetallicRoughness.baseColorTexture.index];
-      tinygltf::Image baseColorImageData = model.images[baseTexture.source];
+      tinygltf::Material material;
+      if (primitive.material >= 0) {
+        material = model.materials[primitive.material];
+      }
+      tinygltf::Texture baseTexture;
+      if (material.pbrMetallicRoughness.baseColorTexture.index >= 0) {
+        baseTexture =
+            model
+                .textures[material.pbrMetallicRoughness.baseColorTexture.index];
+      }
+      tinygltf::Image baseColorImageData;
+      if (baseTexture.source >= 0) {
+        baseColorImageData = model.images[baseTexture.source];
+      }
 
       if (primitive.attributes.count("POSITION") >= 1) {
 
@@ -1686,7 +1698,9 @@ RenderObject Renderer::loadGLTF(std::string path) {
             model.buffers.at(indexBufferView.buffer).data;
 
         vmaMapMemory(vmaAllocator, stagingAllocation, &data);
-        memcpy(data, dataBuffer.data() + indexBufferView.byteOffset,
+        memcpy(data,
+               dataBuffer.data() + indexBufferView.byteOffset +
+                   accesor.byteOffset,
                (size_t)bufferSize);
         vmaUnmapMemory(vmaAllocator, stagingAllocation);
 
@@ -1745,7 +1759,9 @@ RenderObject Renderer::loadGLTF(std::string path) {
             model.buffers.at(indexBufferView.buffer).data;
 
         vmaMapMemory(vmaAllocator, stagingAllocation, &data);
-        memcpy(data, dataBuffer.data() + indexBufferView.byteOffset,
+        memcpy(data,
+               dataBuffer.data() + indexBufferView.byteOffset +
+                   accesor.byteOffset,
                (size_t)bufferSize);
         vmaUnmapMemory(vmaAllocator, stagingAllocation);
 
@@ -1805,7 +1821,9 @@ RenderObject Renderer::loadGLTF(std::string path) {
             model.buffers.at(indexBufferView.buffer).data;
 
         vmaMapMemory(vmaAllocator, stagingAllocation, &data);
-        memcpy(data, dataBuffer.data() + indexBufferView.byteOffset,
+        memcpy(data,
+               dataBuffer.data() + indexBufferView.byteOffset +
+                   accesor.byteOffset,
                (size_t)bufferSize);
         vmaUnmapMemory(vmaAllocator, stagingAllocation);
 
@@ -1865,7 +1883,9 @@ RenderObject Renderer::loadGLTF(std::string path) {
             model.buffers.at(indexBufferView.buffer).data;
 
         vmaMapMemory(vmaAllocator, stagingAllocation, &data);
-        memcpy(data, dataBuffer.data() + indexBufferView.byteOffset,
+        memcpy(data,
+               dataBuffer.data() + indexBufferView.byteOffset +
+                   accesor.byteOffset,
                (size_t)bufferSize);
         vmaUnmapMemory(vmaAllocator, stagingAllocation);
 
@@ -2002,11 +2022,13 @@ void Renderer::recordSceneCommandBuffer(const VkCommandBuffer &commandBuffer,
         commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
         &m_uboDescriptorSets.at(m_currentFrame), 1, dynamicOffsets);
 
-    vkCmdBindDescriptorSets(
-        commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1,
-        &m_loadedTextures.at(m_drawbles.at(drawbleIndex).m_indexToTexture)
-             .m_descriptorSet.at(m_currentFrame),
-        0, nullptr);
+    if (m_loadedTextures.size() > 0) {
+      vkCmdBindDescriptorSets(
+          commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1,
+          &m_loadedTextures.at(m_drawbles.at(drawbleIndex).m_indexToTexture)
+               .m_descriptorSet.at(m_currentFrame),
+          0, nullptr);
+    }
 
     vkCmdDrawIndexed(commandBuffer, m_drawbles.at(drawbleIndex).m_count, 1, 0,
                      0, 0);
