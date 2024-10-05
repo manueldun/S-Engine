@@ -15,6 +15,6 @@ subdir('shaders')
 subdir('textures')
 
 
-executable('vulkanProgram',['main.cpp','Renderer.h','Renderer.cpp','stb_image.h','stb_image_write.h','json.hpp','tiny_gltf.h',vertex_shader_custom_target,fragment_shader_custom_target],
+executable('vulkanProgram',['main.cpp','Renderer.h','Renderer.cpp','Physics.h','Physics.cpp','stb_image.h','stb_image_write.h','json.hpp','tiny_gltf.h',vertex_shader_custom_target,fragment_shader_custom_target],
     dependencies:[glfw_dependency,glm_dependency,vulkan_dependency],
     override_options : ['cpp_std=c++20'])

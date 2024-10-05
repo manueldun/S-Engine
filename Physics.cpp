@@ -1,19 +1,33 @@
 #include "Physics.h"
 #include "glm/common.hpp"
-#include "glm/ext/matrix_common.hpp"
 #include "glm/geometric.hpp"
-Particle::Particle(const glm::vec3 initialPosition,
-                   const glm::vec3 initialVelocity,
-                   const glm::vec3 initialForceAccumulator, const float mass)
+#include <iostream>
+#include <stdexcept>
+namespace Physics {
+ParticleDerivative::ParticleDerivative(const glm::vec3 &dPosition,
+                                       const glm::vec3 &dVelocity)
+    : m_dPosition(dPosition), m_dVelocity(dVelocity) {}
+
+void ParticleDerivative::scale(const float scaleConstant) {
+  m_dPosition = m_dPosition * scaleConstant;
+}
+
+Plane::Plane(glm::vec3 point, glm::vec3 normal)
+    : m_point(point), m_normal(normal) {}
+
+Particle::Particle(const glm::vec3 &initialPosition,
+                   const glm::vec3 &initialVelocity,
+                   const glm::vec3 &initialForceAccumulator, const float mass)
     : m_mass(mass), m_position(initialPosition), m_velocity(initialVelocity),
       m_forceAcumulator(initialForceAccumulator) {}
-ParticleDerivative::ParticleDerivative(const glm::vec3 dPosition,
-                                       const glm::vec3 dVelocity)
-    : m_dPosition(dPosition), m_dVelocity(dVelocity) {}
-ParticleDerivative Particle::getDerivatives(glm::vec3 force) {
+
+ParticleDerivative Particle::getDerivatives(const glm::vec3 &force) {
   m_forceAcumulator = force;
   return ParticleDerivative(m_velocity, m_forceAcumulator / m_mass);
 }
+
+glm::vec3 Particle::getPosition() { return m_position; }
+
 void ParticleSystem::eulerStep(const float delta) {
   std::vector<Particle> nextParticles = m_particles;
   for (Particle &nextParticle : nextParticles) {
@@ -30,30 +44,62 @@ void ParticleSystem::eulerStep(const float delta) {
     m_simulationClock += delta;
   }
   uint32_t particleIndex = 0;
-  const float deltaMaxError = 0.2;
+  const float deltaMaxError = 0.002;
   for (Particle &nextParticle : nextParticles) {
     for (Plane &plane : m_planes) {
       glm::vec3 nextPosition = nextParticle.m_position;
       glm::vec3 previousPosition = m_particles.at(particleIndex).m_position;
-      float deltaError = glm::length(nextPosition - previousPosition)/2.0f;
-      while(deltaError>deltaMaxError)
-      {
-      if (glm::dot(nextPosition - plane.m_point, plane.m_normal) < 0.0f) {
-
-         nextPosition = glm::mix(nextPosition, previousPosition, 0.5f);
-          deltaError/=2.0f;
-      }
+      float distanceToPlane =glm::dot(nextPosition - plane.m_point, plane.m_normal); 
+      bool didCollide = false;
+      if (distanceToPlane<0.0f) {
+        if (glm::dot(nextPosition - plane.m_point, plane.m_normal) < 0.0f) {
+          std::cout<<"Collided!\n";
+          didCollide = true;
+          /*nextPosition = glm::mix(nextPosition, previousPosition, 0.5f);*/
+          /*nextParticle.m_position = nextPosition;*/
+          nextParticle.m_velocity = glm::vec3(0.0f);
+          break;
+        } else {
+          std::cout<<"Not Collided!\n";
+          if (!didCollide) {
+            break;
+          }
+          break;
+          nextParticle.m_velocity = glm::vec3(0.0f);
+          /*nextPosition = glm::mix(nextPosition, previousPosition, 1.5f);*/
+          deltaError = glm::length(nextPosition - previousPosition) / 2.0f;
+        }
       }
     }
+
+    m_particles = nextParticles;
+
     particleIndex++;
   }
 }
-void ParticleDerivative::scale(const float scaleConstant) {
-  m_dPosition = m_dPosition * scaleConstant;
-}
-Plane::Plane(glm::vec3 point, glm::vec3 normal)
-    : m_point(point), m_normal(normal) {}
-void ParticleSystem::addParticle(const Particle particle) {
+
+void ParticleSystem::addParticle(const Particle &particle) {
   m_particles.push_back(particle);
 }
-void ParticleSystem::addPlane(const Plane plane) { m_planes.push_back(plane); }
+
+void ParticleSystem::addPlane(const Plane &plane) { m_planes.push_back(plane); }
+
+float CollisionShape::findMinimalStep(const CollisionShape &otherShape,
+                                      float minimumStep) {
+  throw std::runtime_error("findMinimalStep() not implemented yet");
+  float distance = glm::length(this->centerOfMass - otherShape.centerOfMass);
+  const int MAX_ITERATIONS = 100;
+  int iterations = 0;
+  do {
+    iterations++;
+    if (iterations >= MAX_ITERATIONS) {
+      throw std::runtime_error("more than 100 iterations in findMinimalStep()");
+    }
+    distance = glm::length(this->centerOfMass - otherShape.centerOfMass);
+  } while (minimumStep > distance);
+  return distance;
+}
+glm::vec3 ParticleSystem::getParticlePosition(const uint32_t index) {
+  return m_particles.at(index).m_position;
+}
+} // namespace Physics

@@ -1,5 +1,6 @@
-#include "Renderer.h"
 
+#include "Physics.h"
+#include "Renderer.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/fwd.hpp"
 #include <chrono>
@@ -15,17 +16,29 @@ int main(int argc, char **argv) {
     RenderObject coin = app.loadGLTF("/home/manuel/Documents/assets/"
                                      "KayKit_DungeonRemastered_1.1_FREE/Assets/"
                                      "gltf/coin.gltf");
+    Physics::ParticleSystem particleSystem;
+
+    Physics::Plane floor(glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    particleSystem.addPlane(floor);
+    Physics::Particle coinParticle(glm::vec3(0.0f, 0.0f, 1.0f),
+                                   glm::vec3(0.0f), glm::vec3(0.0f), 1.0f);
+    particleSystem.addParticle(coinParticle);
+
+    auto startTime = std::chrono::high_resolution_clock::now();
+    auto currentTime = std::chrono::high_resolution_clock::now();
     while (!app.shouldExit()) {
 
-      static auto startTime = std::chrono::high_resolution_clock::now();
+      currentTime = std::chrono::high_resolution_clock::now();
+      float deltaTime =
+          std::chrono::duration<float, std::chrono::seconds::period>(
+              currentTime - startTime)
+              .count();
 
-      auto currentTime = std::chrono::high_resolution_clock::now();
-      float time = std::chrono::duration<float, std::chrono::seconds::period>(
-                       currentTime - startTime)
-                       .count();
+      startTime = std::chrono::high_resolution_clock::now();
       glm::mat4 coinMat =
-          glm::rotate(glm::mat4(1.0f), time, glm::vec3(0.0, 0.0, 1.0));
+          glm::translate(glm::mat4(1.0f), particleSystem.getParticlePosition(0));
       coin.setMatrix(coinMat);
+      particleSystem.eulerStep(deltaTime);
       app.loop();
     }
   } catch (const std::exception &e) {
