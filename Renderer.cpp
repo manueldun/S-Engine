@@ -1182,10 +1182,11 @@ void Renderer::createSyncObjects() {
 
 void Renderer::updateUniformBuffer(uint32_t currentImage) {
 
-  for (size_t objectIndex = 0; objectIndex < m_modelMatrices.size();
+  for (size_t objectIndex = 0; objectIndex < m_pNodeToDraw.size();
        objectIndex++) {
+
     UniformBufferObject ubo{};
-    ubo.model = m_modelMatrices.at(objectIndex);
+    ubo.model = m_pNodeToDraw.at(objectIndex)->m_matrix;
     ubo.view =
         glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
                     glm::vec3(0.0f, 0.0f, 1.0f));
@@ -1328,10 +1329,7 @@ void Renderer::createVMA() {
 
   vmaCreateAllocator(&allocatorCreateInfo, &vmaAllocator);
 }
-void Renderer::loop() {
-  drawFrame();
-  glfwPollEvents();
-}
+void Renderer::loop() {}
 
 bool Renderer::shouldExit() { return glfwWindowShouldClose(window); }
 void Renderer::cleanupSwapChain() {
@@ -1604,8 +1602,10 @@ RenderObject Renderer::loadGLTF(std::string path) {
       vertexInputAttributeDescriptions;
   VkIndexType indexType;
 
+  std::vector<Node> nodes;
   for (auto &node : model.nodes) {
     tinygltf::Mesh mesh = model.meshes.at(node.mesh);
+    std::vector<Drawble> drawbles;
     for (auto &primitive : mesh.primitives) {
 
       BufferData bufferData{};
@@ -1925,9 +1925,11 @@ RenderObject Renderer::loadGLTF(std::string path) {
       VkPipeline pipeline = createGraphicPipeline(
           "./shaders/modelShader.vert", "./shaders/modelShader.frag",
           vertexInputBindingDescriptions, vertexInputAttributeDescriptions);
+      const uint32_t nextIndexToDescriptor = drawbles.size();
 
-      m_drawbles.push_back(Drawble(bufferData, pipeline, outputIndexOffset,
-                                   outputCount, indexType, outputIndexTexture));
+      drawbles.push_back(Drawble(bufferData, pipeline, outputIndexOffset,
+                                 outputCount, indexType, outputIndexTexture,
+                                 nextIndexToDescriptor));
     }
     glm::mat4 initialMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f),
                                           glm::vec3(1.0f, 0.0f, 0.0f));
@@ -1941,9 +1943,9 @@ RenderObject Renderer::loadGLTF(std::string path) {
     } else if (node.matrix.size() != 0) {
     }
 
-    m_nodes.push_back(Node(node.name, m_drawbles, initialMatrix));
+    nodes.push_back(Node(node.name, drawbles, initialMatrix));
   }
-  return RenderObject(*this, m_nodes.back().getInitialMatrix());
+  return RenderObject(nodes);
 }
 void Renderer::recordSceneCommandBuffer(const VkCommandBuffer &commandBuffer,
                                         const uint32_t imageIndex) {
@@ -1974,17 +1976,21 @@ void Renderer::recordSceneCommandBuffer(const VkCommandBuffer &commandBuffer,
   vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo,
                        VK_SUBPASS_CONTENTS_INLINE);
 
-  for (size_t drawbleIndex = 0; drawbleIndex < m_drawbles.size();
+  for (size_t drawbleIndex = 0; drawbleIndex < m_pNodeToDraw.size();
        drawbleIndex++) {
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      m_drawbles.at(drawbleIndex).m_pipeline);
+    vkCmdBindPipeline(
+        commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        m_pNodeToDraw.at(drawbleIndex)->m_drawbles.at(0).m_pipeline);
 
-    VkBuffer positionBuffer =
-        m_drawbles.at(drawbleIndex).m_bufferData.positionBuffer;
-    VkBuffer normalBuffer =
-        m_drawbles.at(drawbleIndex).m_bufferData.normalBuffer;
-    VkBuffer coordtexBuffer =
-        m_drawbles.at(drawbleIndex).m_bufferData.texCoordBuffer;
+    VkBuffer positionBuffer = m_pNodeToDraw.at(drawbleIndex)
+                                  ->m_drawbles.at(0)
+                                  .m_bufferData.positionBuffer;
+    VkBuffer normalBuffer = m_pNodeToDraw.at(drawbleIndex)
+                                ->m_drawbles.at(0)
+                                .m_bufferData.normalBuffer;
+    VkBuffer coordtexBuffer = m_pNodeToDraw.at(drawbleIndex)
+                                  ->m_drawbles.at(0)
+                                  .m_bufferData.texCoordBuffer;
 
     std::array<VkBuffer, 3> buffers = {positionBuffer, normalBuffer,
                                        coordtexBuffer};
@@ -1993,7 +1999,9 @@ void Renderer::recordSceneCommandBuffer(const VkCommandBuffer &commandBuffer,
     vkCmdBindVertexBuffers(commandBuffer, 0, buffers.size(), buffers.data(),
                            offsets.data());
 
-    VkBuffer indexBuffer = m_drawbles.at(drawbleIndex).m_bufferData.indexBuffer;
+    VkBuffer indexBuffer = m_pNodeToDraw.at(drawbleIndex)
+                               ->m_drawbles.at(0)
+                               .m_bufferData.indexBuffer;
     vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
     VkViewport viewport{};
@@ -2021,13 +2029,13 @@ void Renderer::recordSceneCommandBuffer(const VkCommandBuffer &commandBuffer,
     if (m_loadedTextures.size() > 0) {
       vkCmdBindDescriptorSets(
           commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1,
-          &m_loadedTextures.at(m_drawbles.at(drawbleIndex).m_indexToTexture)
+          &m_loadedTextures.at(m_pNodeToDraw.at(drawbleIndex)->m_drawbles.at(0).m_indexToTexture)
                .m_descriptorSet.at(m_currentFrame),
           0, nullptr);
     }
 
-    vkCmdDrawIndexed(commandBuffer, m_drawbles.at(drawbleIndex).m_count, 1, 0,
-                     0, 0);
+    vkCmdDrawIndexed(commandBuffer, m_pNodeToDraw.at(drawbleIndex)->m_drawbles.at(drawbleIndex).m_count, 1, 0, 0,
+                     0);
   }
   vkCmdEndRenderPass(commandBuffer);
   if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
@@ -2036,10 +2044,11 @@ void Renderer::recordSceneCommandBuffer(const VkCommandBuffer &commandBuffer,
 }
 Drawble::Drawble(const BufferData &bufferData, const VkPipeline &pipeline,
                  const uint32_t indexOffset, const uint32_t count,
-                 const VkIndexType &indexType, const uint32_t &indexToTexture)
+                 const VkIndexType &indexType, const uint32_t &indexToTexture,
+                 const uint32_t &indexToDescriptor)
     : m_bufferData(bufferData), m_pipeline(pipeline),
       m_indexOffset(indexOffset), m_count(count), m_indexType(indexType),
-      m_indexToTexture(indexToTexture)
+      m_indexToTexture(indexToTexture), m_indexToDescriptor(indexToDescriptor)
 
 {}
 Texture::Texture(const VkImage &image, const VkImageView &imageView,
@@ -2072,7 +2081,7 @@ void Renderer::resizeDescriptorSets() {
 }
 Node::Node(std::string name, const std::vector<Drawble> drawbles,
            const glm::mat4 initialMatrix)
-    : m_initialMatrix(initialMatrix), m_name(name), m_drawbles(drawbles) {}
+    : m_matrix(initialMatrix), m_name(name), m_drawbles(drawbles) {}
 void Renderer::createDescriptorSetLayouts() {
   {
     VkDescriptorSetLayoutBinding binding{};
@@ -2222,12 +2231,21 @@ Renderer::allocateTextureDescriptorSet(VkImageView imageview,
 void Renderer::setMatrix(const uint32_t index, const glm::mat4 matrix) {
   m_modelMatrices.at(index) = matrix;
 }
-RenderObject::RenderObject(Renderer &renderer, const glm::mat4 initialMatrix)
-    : m_renderer(renderer), m_initialMatrix(initialMatrix) {
-  m_index = m_renderer.m_modelMatrices.size();
-  m_renderer.m_modelMatrices.push_back(initialMatrix);
+RenderObject::RenderObject(const std::vector<Node> &nodes) : m_nodes(nodes) {}
+void RenderObject::setMatrix(const glm::mat4 &matrix, const uint32_t index) {
+  m_nodes.at(0).setMatrix(matrix);
 }
-void RenderObject::setMatrix(const glm::mat4 matrix) {
-  m_renderer.setMatrix(m_index, matrix * m_initialMatrix);
+const glm::mat4 Node::getInitialMatrix() { return m_matrix; }
+void Renderer::draw(RenderObject *renderObject) {
+  for (auto &node : renderObject->m_nodes) {
+      m_pNodeToDraw.push_back(&node);
+  }
 }
-const glm::mat4 Node::getInitialMatrix() { return m_initialMatrix; }
+void Node::setMatrix(const glm::mat4 &matrix) {
+  m_matrix = matrix;
+}
+void Renderer::endFrame() {
+  drawFrame();
+  m_pNodeToDraw.clear();
+  glfwPollEvents();
+}

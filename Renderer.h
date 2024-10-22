@@ -75,7 +75,8 @@ public:
   Drawble() = delete;
   Drawble(const BufferData &bufferData, const VkPipeline &pipeline,
           const uint32_t indexOffset, const uint32_t count,
-          const VkIndexType &indexType, const uint32_t &indexToTexture);
+          const VkIndexType &indexType, const uint32_t &indexToTexture,
+          const uint32_t &indexToDescriptor);
   std::string getName();
 
 private:
@@ -85,17 +86,19 @@ private:
   const uint32_t m_count;
   const VkIndexType m_indexType;
   const uint32_t m_indexToTexture;
+  const uint32_t m_indexToDescriptor;
 };
 class Node {
 public:
-  friend class renderer;
+  friend class Renderer;
   Node() = delete;
   Node(const std::string name, const std::vector<Drawble> drawbles,
        const glm::mat4 initialMatrix);
   const glm::mat4 getInitialMatrix();
+  void setMatrix(const glm::mat4 &matrix);
 
 private:
-  const glm::mat4 m_initialMatrix;
+  glm::mat4 m_matrix;
   const std::string m_name;
   std::vector<Drawble> m_drawbles;
 };
@@ -137,12 +140,15 @@ struct SwapChainSupportDetails {
 class RenderObject;
 class Renderer {
 public:
+  friend class RenderObject;
   Renderer();
   RenderObject loadGLTF(std::string path);
   void init();
   void loop();
   void destroy();
   bool shouldExit();
+  void draw(RenderObject* renderObject);
+  void endFrame();
 
 private:
   void initWindow();
@@ -289,25 +295,23 @@ private:
   void cleanupSwapChain();
   void recreateSwapChain();
   void cleanup();
-  std::vector<Node> m_nodes;
-  std::vector<Drawble> m_drawbles;
   std::vector<BufferData> m_loadedBufferData;
   std::vector<Texture> m_loadedTextures;
   std::vector<glm::mat4> m_modelMatrices;
   uint32_t addModelMatrix(const glm::mat4 matrix);
   void setMatrix(const uint32_t index, const glm::mat4 matrix);
   void resizeDescriptorSets();
-  friend class RenderObject;
+  std::vector<Node *> m_pNodeToDraw;
 };
 class RenderObject {
 public:
+  friend class Renderer;
   RenderObject() = delete;
-  RenderObject(Renderer &renderer, const glm::mat4 initialMatrix);
-  void setMatrix(const glm::mat4 matrix);
+  RenderObject(const std::vector<Node> &nodes);
+  void setMatrix(const glm::mat4 &matrix, const uint32_t index);
   RenderObject(const RenderObject &other) = default;
 
+
 private:
-  uint32_t m_index = 0;
-  Renderer &m_renderer;
-  const glm::mat4 m_initialMatrix;
+  std::vector<Node> m_nodes;
 };
