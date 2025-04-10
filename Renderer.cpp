@@ -5,6 +5,9 @@
 #include "glm/gtc/quaternion.hpp"
 #include "glm/gtc/type_ptr.hpp"
 #include "glm/trigonometric.hpp"
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_vulkan.h"
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/quaternion.hpp"
 
@@ -73,6 +76,7 @@ bool QueueFamilyIndices::isComplete() {
 void Renderer::init() {
   initWindow();
   initVulkan();
+  initImGui();
 }
 void Renderer::destroy() { cleanup(); }
 
@@ -153,6 +157,7 @@ std::vector<const char *> Renderer::getRequiredExtensions() {
                                        glfwExtensions + glfwExtensionCount);
   if (enableValidationLayers) {
     extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    // extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
   }
   return extensions;
 }
@@ -1180,6 +1185,39 @@ void Renderer::createSyncObjects() {
   }
 }
 
+void Renderer::initImGui() {
+
+  // Setup Dear ImGui context
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  ImGuiIO &io = ImGui::GetIO();
+  io.ConfigFlags |=
+      ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
+  io.ConfigFlags |=
+      ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
+  // io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // IF using
+  // Docking Branch
+
+  // Setup Platform/Renderer backends
+  ImGui_ImplGlfw_InitForVulkan(window, true);
+  ImGui_ImplVulkan_InitInfo init_info = {};
+  init_info.Instance = instance;
+  init_info.PhysicalDevice = physicalDevice;
+  init_info.Device = device;
+  init_info.QueueFamily = queueFamilyIndices.graphicsFamily.value();
+  init_info.Queue = queue;
+  // init_info.PipelineCache = YOUR_PIPELINE_CACHE;
+  init_info.DescriptorPool = m_firstDescriptorPool;
+  init_info.MinImageCount = MAX_FRAMES_IN_FLIGHT;
+  init_info.ImageCount = MAX_FRAMES_IN_FLIGHT;
+  init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+  init_info.CheckVkResultFn = check_vk_result;
+
+  init_info.RenderPass = renderPass;
+
+  ImGui_ImplVulkan_Init(&init_info);
+}
+
 void Renderer::updateUniformBuffer(uint32_t currentImage) {
 
   for (size_t objectIndex = 0; objectIndex < m_pNodeToDraw.size();
@@ -1266,13 +1304,88 @@ void Renderer::drawFrame() {
   m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
+void Renderer::drawGui() {
+  bool g_SwapChainRebuild = false;
+  VkSemaphore image_acquired_semaphore =
+      imguiWindow.FrameSemaphores[imguiWindow.SemaphoreIndex]
+          .ImageAcquiredSemaphore;
+  VkSemaphore render_complete_semaphore =
+      imguiWindow.FrameSemaphores[imguiWindow.SemaphoreIndex]
+          .RenderCompleteSemaphore;
+
+  VkResult err = vkAcquireNextImageKHR(device, imguiWindow.Swapchain,
+                                       UINT64_MAX, image_acquired_semaphore,
+                                       VK_NULL_HANDLE, &imguiWindow.FrameIndex);
+
+  if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR)
+    g_SwapChainRebuild = true;
+  if (err == VK_ERROR_OUT_OF_DATE_KHR)
+    return;
+
+  ImGui_ImplVulkanH_Frame *fd = &imguiWindow.Frames[imguiWindow.FrameIndex];
+  {
+    err = vkWaitForFences(
+        device, 1, &fd->Fence, VK_TRUE,
+        UINT64_MAX); // wait indefinitely instead of periodically checking
+
+    err = vkResetFences(device, 1, &fd->Fence);
+  }
+  {
+    err = vkResetCommandPool(device, fd->CommandPool, 0);
+    VkCommandBufferBeginInfo info = {};
+    info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    err = vkBeginCommandBuffer(fd->CommandBuffer, &info);
+  }
+  {
+    VkRenderPassBeginInfo info = {};
+    info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    info.renderPass = imguiWindow.RenderPass;
+    info.framebuffer = fd->Framebuffer;
+    info.renderArea.extent.width = imguiWindow.Width;
+    info.renderArea.extent.height = imguiWindow.Height;
+    info.clearValueCount = 1;
+    info.pClearValues = &imguiWindow.ClearValue;
+    vkCmdBeginRenderPass(fd->CommandBuffer, &info, VK_SUBPASS_CONTENTS_INLINE);
+  }
+  // Start the Dear ImGui frame
+  ImGui_ImplVulkan_NewFrame();
+  ImGui_ImplGlfw_NewFrame();
+  ImGui::NewFrame();
+
+  // Rendering
+  ImGui::Render();
+  ImDrawData *draw_data = ImGui::GetDrawData();
+
+  // Record dear imgui primitives into command buffer
+  ImGui_ImplVulkan_RenderDrawData(draw_data, fd->CommandBuffer);
+  // Submit command buffer
+  vkCmdEndRenderPass(fd->CommandBuffer);
+  {
+    VkPipelineStageFlags wait_stage =
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSubmitInfo info = {};
+    info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    info.waitSemaphoreCount = 1;
+    info.pWaitSemaphores = &image_acquired_semaphore;
+    info.pWaitDstStageMask = &wait_stage;
+    info.commandBufferCount = 1;
+    info.pCommandBuffers = &fd->CommandBuffer;
+    info.signalSemaphoreCount = 1;
+    info.pSignalSemaphores = &render_complete_semaphore;
+
+    err = vkEndCommandBuffer(fd->CommandBuffer);
+    err = vkQueueSubmit(queue, 1, &info, fd->Fence);
+  }
+}
 void Renderer::createLogicalDevice() {
 
-  QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+  queueFamilyIndices = findQueueFamilies(physicalDevice);
 
   std::vector<VkDeviceQueueCreateInfo> deviceQueueCreateInfos;
-  std::set<uint32_t> uniqueQueueFamilies = {indices.graphicsFamily.value(),
-                                            indices.presentFamily.value()};
+  std::set<uint32_t> uniqueQueueFamilies = {
+      queueFamilyIndices.graphicsFamily.value(),
+      queueFamilyIndices.presentFamily.value()};
 
   float queuePriority = 1.0f;
   for (uint32_t queueFamily : uniqueQueueFamilies) {
@@ -1311,8 +1424,10 @@ void Renderer::createLogicalDevice() {
       VK_SUCCESS) {
     throw std::runtime_error("failed to create logica device");
   }
-  vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &queue);
-  vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
+  vkGetDeviceQueue(device, queueFamilyIndices.graphicsFamily.value(), 0,
+                   &queue);
+  vkGetDeviceQueue(device, queueFamilyIndices.presentFamily.value(), 0,
+                   &presentQueue);
 }
 
 void Renderer::createVMA() {
@@ -1362,6 +1477,10 @@ void Renderer::recreateSwapChain() {
 
 void Renderer::cleanup() {
   vkDeviceWaitIdle(device);
+
+  ImGui_ImplVulkan_Shutdown();
+  ImGui_ImplGlfw_Shutdown();
+  ImGui::DestroyContext();
 
   vkDestroyImageView(device, depthImageView, nullptr);
 
@@ -2027,20 +2146,37 @@ void Renderer::recordSceneCommandBuffer(const VkCommandBuffer &commandBuffer,
         &m_uboDescriptorSets.at(m_currentFrame), 1, dynamicOffsets);
 
     if (m_loadedTextures.size() > 0) {
-      vkCmdBindDescriptorSets(
-          commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1,
-          &m_loadedTextures.at(m_pNodeToDraw.at(drawbleIndex)->m_drawbles.at(0).m_indexToTexture)
-               .m_descriptorSet.at(m_currentFrame),
-          0, nullptr);
+      vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              pipelineLayout, 1, 1,
+                              &m_loadedTextures
+                                   .at(m_pNodeToDraw.at(drawbleIndex)
+                                           ->m_drawbles.at(0)
+                                           .m_indexToTexture)
+                                   .m_descriptorSet.at(m_currentFrame),
+                              0, nullptr);
     }
 
-    vkCmdDrawIndexed(commandBuffer, m_pNodeToDraw.at(drawbleIndex)->m_drawbles.at(drawbleIndex).m_count, 1, 0, 0,
-                     0);
+    vkCmdDrawIndexed(
+        commandBuffer,
+        m_pNodeToDraw.at(drawbleIndex)->m_drawbles.at(drawbleIndex).m_count, 1,
+        0, 0, 0);
   }
+
+  ImGui_ImplVulkan_NewFrame();
+  ImGui_ImplGlfw_NewFrame();
+
+  ImGui::NewFrame();
+  ImGui::ShowDemoWindow();
+
+  ImGui::Render();
+  ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+
   vkCmdEndRenderPass(commandBuffer);
   if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
     throw std::runtime_error("failed to record command buffer");
   }
+
+
 }
 Drawble::Drawble(const BufferData &bufferData, const VkPipeline &pipeline,
                  const uint32_t indexOffset, const uint32_t count,
@@ -2083,6 +2219,7 @@ Node::Node(std::string name, const std::vector<Drawble> drawbles,
            const glm::mat4 initialMatrix)
     : m_matrix(initialMatrix), m_name(name), m_drawbles(drawbles) {}
 void Renderer::createDescriptorSetLayouts() {
+
   {
     VkDescriptorSetLayoutBinding binding{};
     binding.binding = 0;
@@ -2238,12 +2375,10 @@ void RenderObject::setMatrix(const glm::mat4 &matrix, const uint32_t index) {
 const glm::mat4 Node::getInitialMatrix() { return m_matrix; }
 void Renderer::draw(RenderObject *renderObject) {
   for (auto &node : renderObject->m_nodes) {
-      m_pNodeToDraw.push_back(&node);
+    m_pNodeToDraw.push_back(&node);
   }
 }
-void Node::setMatrix(const glm::mat4 &matrix) {
-  m_matrix = matrix;
-}
+void Node::setMatrix(const glm::mat4 &matrix) { m_matrix = matrix; }
 void Renderer::endFrame() {
   drawFrame();
   m_pNodeToDraw.clear();

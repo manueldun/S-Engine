@@ -1,4 +1,5 @@
 #pragma once
+#include "imgui_impl_vulkan.h"
 #include "glm/fwd.hpp"
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
@@ -11,6 +12,15 @@
 #include <optional>
 #include <string>
 #include <vector>
+
+static void check_vk_result(VkResult err)
+{
+    if (err == 0)
+        return;
+    fprintf(stderr, "[vulkan] Error: VkResult = %d\n", err);
+    if (err < 0)
+        abort();
+}
 
 struct UniformBufferObject {
   glm::mat4 model;
@@ -147,7 +157,7 @@ public:
   void loop();
   void destroy();
   bool shouldExit();
-  void draw(RenderObject* renderObject);
+  void draw(RenderObject *renderObject);
   void endFrame();
 
 private:
@@ -276,10 +286,14 @@ private:
   std::vector<VkSemaphore> renderFinishedSemaphores;
   std::vector<VkFence> inFlightFences;
   void createSyncObjects();
+
+  void initImGui();
   uint32_t m_currentFrame = 0;
   bool framebufferResized = false;
   void updateUniformBuffer(uint32_t currentImage);
   void drawFrame();
+  void drawGui();
+  ImGui_ImplVulkanH_Window imguiWindow;
   void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageindex);
   void recordSceneCommandBuffer(const VkCommandBuffer &commandBuffer,
                                 const uint32_t imageIndex);
@@ -289,6 +303,7 @@ private:
   VkQueue queue;
   VkQueue presentQueue;
   void createLogicalDevice();
+  QueueFamilyIndices queueFamilyIndices;
   VmaAllocator vmaAllocator;
   void createVMA();
   const size_t MAX_FRAMES_IN_FLIGHT = 2;
@@ -310,7 +325,6 @@ public:
   RenderObject(const std::vector<Node> &nodes);
   void setMatrix(const glm::mat4 &matrix, const uint32_t index);
   RenderObject(const RenderObject &other) = default;
-
 
 private:
   std::vector<Node> m_nodes;

@@ -2,6 +2,7 @@
 #include "Renderer.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/fwd.hpp"
+#include "imgui_impl_glfw.h"
 #include <chrono>
 #include <glm/common.hpp>
 #include <iostream>
@@ -12,15 +13,19 @@ int main(int argc, char **argv) {
     /*    app.loadGLTF("/home/manuel/Documents/assets/"*/
     /*                 "KayKit_DungeonRemastered_1.1_FREE/Assets/"*/
     /*                 "gltf/table_small.gltf");*/
-    RenderObject coin = app.loadGLTF("/home/manuel/Documents/assets/"
+    
+    RenderObject coin = app.loadGLTF("/home/manuel/Documents/3d-assets/"
                                      "KayKit_DungeonRemastered_1.1_FREE/Assets/"
                                      "gltf/coin.gltf");
     Physics::ParticleSystem particleSystem;
 
     Physics::Plane floor(glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+
     particleSystem.addPlane(floor);
+
     Physics::Particle coinParticle(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f),
                                    glm::vec3(0.0f), 1.0f);
+
     particleSystem.addParticle(coinParticle);
 
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -38,7 +43,9 @@ int main(int argc, char **argv) {
                                          particleSystem.getParticlePosition(0));
       coin.setMatrix(coinMat, 0);
       particleSystem.eulerStep(deltaTime);
+
       app.draw(&coin);
+
       app.endFrame();
     }
   } catch (const std::exception &e) {

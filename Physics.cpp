@@ -44,7 +44,7 @@ void ParticleSystem::eulerStep(const float delta) {
     m_simulationClock += delta;
   }
   uint32_t particleIndex = 0;
-  const float deltaMaxError = 0.002;
+  const float DELTA_MAX_ERROR = 0.002;
   for (Particle &nextParticle : nextParticles) {
     for (Plane &plane : m_planes) {
 
@@ -52,14 +52,12 @@ void ParticleSystem::eulerStep(const float delta) {
 
       if (glm::dot(nextPosition - plane.m_point, plane.m_normal) < 0.0f) {
 
-        std::cout << "Collided!" << std::endl;
         nextPosition = glm::mix(nextPosition,
                                 m_particles.at(particleIndex).m_position, 0.5f);
         float distanceError =
             glm::dot(nextPosition - plane.m_point, plane.m_normal);
 
-        while (distanceError >= deltaMaxError &&
-               distanceError <= 0.0f) {
+        while (distanceError >= DELTA_MAX_ERROR && distanceError <= 0.0f) {
 
           if (distanceError < 0.0f) {
 
@@ -70,14 +68,14 @@ void ParticleSystem::eulerStep(const float delta) {
           } else {
             nextPosition = glm::mix(
                 nextPosition, m_particles.at(particleIndex).m_position, 1.5f);
-            
+
             std::cout << "Going forward, Error:" << distanceError << std::endl;
           }
           distanceError =
               glm::dot(nextPosition - plane.m_point, plane.m_normal);
         }
 
-        nextParticle.m_velocity = -nextParticle.m_velocity;
+        nextParticle.m_velocity = -nextParticle.m_velocity * 0.8f;
       }
       nextParticle.m_position = nextPosition;
     }
