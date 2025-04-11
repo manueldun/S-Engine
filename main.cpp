@@ -38,7 +38,6 @@ int main(int argc, char **argv) {
               currentTime - startTime)
               .count();
 
-      startTime = std::chrono::high_resolution_clock::now();
       glm::mat4 coinMat = glm::translate(glm::mat4(1.0f),
                                          particleSystem.getParticlePosition(0));
       coin.setMatrix(coinMat, 0);

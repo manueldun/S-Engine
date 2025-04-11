@@ -28,61 +28,71 @@ ParticleDerivative Particle::getDerivatives(const glm::vec3 &force) {
 
 glm::vec3 Particle::getPosition() { return m_position; }
 
-void ParticleSystem::eulerStep(const float delta) {
-  std::vector<Particle> nextParticles = m_particles;
-  for (Particle &nextParticle : nextParticles) {
+void ParticleSystem::eulerStep(const float time) {
+  static float lastTime = time;
+  static float delta = time - lastTime;
+  delta = time - lastTime;
+  const float MAX_DELTA = 0.016f;
+  if (delta > MAX_DELTA) {
+    std::vector<Particle> nextParticles = m_particles;
+    for (Particle &nextParticle : nextParticles) {
 
-    nextParticle.m_forceAcumulator = glm::vec3(0.0, 0.0, 0.0);
-    glm::vec3 dPosition = nextParticle.m_velocity;
-    glm::vec3 gravity = glm::vec3(0.0f, 0.0f, -9.8f) * nextParticle.m_mass;
-    glm::vec3 dVelocity =
-        gravity + nextParticle.m_forceAcumulator / nextParticle.m_mass;
-    dPosition *= delta;
-    dVelocity *= delta;
-    nextParticle.m_position += dPosition;
-    nextParticle.m_velocity += dVelocity;
-    m_simulationClock += delta;
-  }
-  uint32_t particleIndex = 0;
-  const float DELTA_MAX_ERROR = 0.002;
-  for (Particle &nextParticle : nextParticles) {
-    for (Plane &plane : m_planes) {
-
-      glm::vec3 nextPosition = nextParticle.m_position;
-
-      if (glm::dot(nextPosition - plane.m_point, plane.m_normal) < 0.0f) {
-
-        nextPosition = glm::mix(nextPosition,
-                                m_particles.at(particleIndex).m_position, 0.5f);
-        float distanceError =
-            glm::dot(nextPosition - plane.m_point, plane.m_normal);
-
-        while (distanceError >= DELTA_MAX_ERROR && distanceError <= 0.0f) {
-
-          if (distanceError < 0.0f) {
-
-            nextPosition = glm::mix(
-                nextPosition, m_particles.at(particleIndex).m_position, 0.5f);
-
-            std::cout << "Backing off, Error:" << distanceError << std::endl;
-          } else {
-            nextPosition = glm::mix(
-                nextPosition, m_particles.at(particleIndex).m_position, 1.5f);
-
-            std::cout << "Going forward, Error:" << distanceError << std::endl;
-          }
-          distanceError =
-              glm::dot(nextPosition - plane.m_point, plane.m_normal);
-        }
-
-        nextParticle.m_velocity = -nextParticle.m_velocity * 0.8f;
-      }
-      nextParticle.m_position = nextPosition;
+      nextParticle.m_forceAcumulator = glm::vec3(0.0, 0.0, 0.0);
+      glm::vec3 dPosition = nextParticle.m_velocity;
+      glm::vec3 gravity = glm::vec3(0.0f, 0.0f, -9.8f) * nextParticle.m_mass;
+      glm::vec3 dVelocity =
+          gravity + nextParticle.m_forceAcumulator / nextParticle.m_mass;
+      dPosition *= delta;
+      dVelocity *= delta;
+      nextParticle.m_position += dPosition;
+      nextParticle.m_velocity += dVelocity;
+      m_simulationClock += delta;
     }
+    uint32_t particleIndex = 0;
+    const float deltaMaxError = 0.002;
+    for (Particle &nextParticle : nextParticles) {
+      for (Plane &plane : m_planes) {
 
-    m_particles = nextParticles;
+        glm::vec3 nextPosition = nextParticle.m_position;
 
-    particleIndex++;
+        if (glm::dot(nextPosition - plane.m_point, plane.m_normal) < 0.0f) {
+
+          std::cout << "Collided!" << std::endl;
+          nextPosition = glm::mix(
+              nextPosition, m_particles.at(particleIndex).m_position, 0.5f);
+          float distanceError =
+              glm::dot(nextPosition - plane.m_point, plane.m_normal);
+
+          while (distanceError >= deltaMaxError && distanceError <= 0.0f) {
+
+            if (distanceError < 0.0f) {
+
+              nextPosition = glm::mix(
+                  nextPosition, m_particles.at(particleIndex).m_position, 0.5f);
+
+              std::cout << "Backing off, Error:" << distanceError << std::endl;
+            } else {
+              nextPosition = glm::mix(
+                  nextPosition, m_particles.at(particleIndex).m_position, 1.5f);
+
+              std::cout << "Going forward, Error:" << distanceError
+                        << std::endl;
+            }
+            distanceError =
+                glm::dot(nextPosition - plane.m_point, plane.m_normal);
+          }
+
+          nextParticle.m_velocity = -nextParticle.m_velocity * 0.5f;
+        }
+        nextParticle.m_position = nextPosition;
+      }
+
+      m_particles = nextParticles;
+
+      particleIndex++;
+    }
+    delta -= MAX_DELTA;
+    lastTime = time;
   }
 }
 
