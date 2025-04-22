@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     /*                 "KayKit_DungeonRemastered_1.1_FREE/Assets/"*/
     /*                 "gltf/table_small.gltf");*/
     
-    RenderObject coin = app.loadGLTF("/home/manuel/Documents/3d-assets/"
+    RenderObject coin = app.loadGLTF("/home/manuel/3d-assets/"
                                      "KayKit_DungeonRemastered_1.1_FREE/Assets/"
                                      "gltf/coin.gltf");
     Physics::ParticleSystem particleSystem;

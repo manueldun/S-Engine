@@ -1,6 +1,7 @@
 #pragma once
 #include "imgui_impl_vulkan.h"
 #include "glm/fwd.hpp"
+#include "tiny_gltf.h"
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -322,10 +323,12 @@ class RenderObject {
 public:
   friend class Renderer;
   RenderObject() = delete;
-  RenderObject(const std::vector<Node> &nodes);
+  RenderObject(const std::vector<Node> &nodes, const tinygltf::Model& model);
   void setMatrix(const glm::mat4 &matrix, const uint32_t index);
   RenderObject(const RenderObject &other) = default;
+  glm::vec3 getCenterOfMass();
 
 private:
   std::vector<Node> m_nodes;
+  tinygltf::Model m_model;
 };

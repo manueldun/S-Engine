@@ -1,5 +1,7 @@
 #pragma once
+#include "glm/fwd.hpp"
 #include "glm/glm.hpp"
+#include <array>
 #include <istream>
 #include <vector>
 namespace Physics {

@@ -1582,7 +1582,7 @@ std::vector<char> readFile(const std::string &filename) {
   file.read(buffer.data(), fileSize);
   file.close();
 
-  return buffer;
+  ndreturn buffer;
 }
 VkResult CreateDebugUtilsMessengerEXT(
     VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
@@ -2064,7 +2064,7 @@ RenderObject Renderer::loadGLTF(std::string path) {
 
     nodes.push_back(Node(node.name, drawbles, initialMatrix));
   }
-  return RenderObject(nodes);
+  return RenderObject(nodes, model);
 }
 void Renderer::recordSceneCommandBuffer(const VkCommandBuffer &commandBuffer,
                                         const uint32_t imageIndex) {
@@ -2175,8 +2175,6 @@ void Renderer::recordSceneCommandBuffer(const VkCommandBuffer &commandBuffer,
   if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
     throw std::runtime_error("failed to record command buffer");
   }
-
-
 }
 Drawble::Drawble(const BufferData &bufferData, const VkPipeline &pipeline,
                  const uint32_t indexOffset, const uint32_t count,
@@ -2368,7 +2366,9 @@ Renderer::allocateTextureDescriptorSet(VkImageView imageview,
 void Renderer::setMatrix(const uint32_t index, const glm::mat4 matrix) {
   m_modelMatrices.at(index) = matrix;
 }
-RenderObject::RenderObject(const std::vector<Node> &nodes) : m_nodes(nodes) {}
+RenderObject::RenderObject(const std::vector<Node> &nodes,
+                           const tinygltf::Model &model)
+    : m_nodes(nodes), m_model(model) {}
 void RenderObject::setMatrix(const glm::mat4 &matrix, const uint32_t index) {
   m_nodes.at(0).setMatrix(matrix);
 }
@@ -2383,4 +2383,20 @@ void Renderer::endFrame() {
   drawFrame();
   m_pNodeToDraw.clear();
   glfwPollEvents();
+}
+
+glm::vec3 RenderObject::getCenterOfMass() {
+  tinygltf::Model model = m_model;
+  tinygltf::Buffer buffer = std::move(model.buffers.at(0));
+  tinygltf::Node node = model.nodes.at(0);
+  tinygltf::Mesh mesh = model.meshes.at(node.mesh);
+  tinygltf::Primitive primitive = mesh.primitives.at(0);
+  tinygltf::Accessor indicesAccessor = model.accessors.at(primitive.indices);
+  indicesAccessor.byteOffset;
+  model.bufferViews.at(indicesAccessor.bufferView);
+  primitive.attributes["POSITION"].byteOffset;
+  model.bufferViews.at()
+  
+
+
 }

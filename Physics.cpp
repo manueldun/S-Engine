@@ -57,7 +57,6 @@ void ParticleSystem::eulerStep(const float time) {
 
         if (glm::dot(nextPosition - plane.m_point, plane.m_normal) < 0.0f) {
 
-          std::cout << "Collided!" << std::endl;
           nextPosition = glm::mix(
               nextPosition, m_particles.at(particleIndex).m_position, 0.5f);
           float distanceError =
@@ -70,13 +69,9 @@ void ParticleSystem::eulerStep(const float time) {
               nextPosition = glm::mix(
                   nextPosition, m_particles.at(particleIndex).m_position, 0.5f);
 
-              std::cout << "Backing off, Error:" << distanceError << std::endl;
             } else {
               nextPosition = glm::mix(
                   nextPosition, m_particles.at(particleIndex).m_position, 1.5f);
-
-              std::cout << "Going forward, Error:" << distanceError
-                        << std::endl;
             }
             distanceError =
                 glm::dot(nextPosition - plane.m_point, plane.m_normal);
