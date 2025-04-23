@@ -1,6 +1,7 @@
 #include "Renderer.h"
 
 #include "GLFW/glfw3.h"
+#include "glm/ext/vector_float3.hpp"
 #include "glm/fwd.hpp"
 #include "glm/gtc/quaternion.hpp"
 #include "glm/gtc/type_ptr.hpp"
@@ -1582,7 +1583,7 @@ std::vector<char> readFile(const std::string &filename) {
   file.read(buffer.data(), fileSize);
   file.close();
 
-  ndreturn buffer;
+  return buffer;
 }
 VkResult CreateDebugUtilsMessengerEXT(
     VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
@@ -2387,16 +2388,52 @@ void Renderer::endFrame() {
 
 glm::vec3 RenderObject::getCenterOfMass() {
   tinygltf::Model model = m_model;
-  tinygltf::Buffer buffer = std::move(model.buffers.at(0));
+  tinygltf::Buffer buffer = model.buffers.at(0);
   tinygltf::Node node = model.nodes.at(0);
   tinygltf::Mesh mesh = model.meshes.at(node.mesh);
   tinygltf::Primitive primitive = mesh.primitives.at(0);
   tinygltf::Accessor indicesAccessor = model.accessors.at(primitive.indices);
-  indicesAccessor.byteOffset;
-  model.bufferViews.at(indicesAccessor.bufferView);
-  primitive.attributes["POSITION"].byteOffset;
-  model.bufferViews.at()
-  
+  tinygltf::BufferView indicesBufferView =
+      model.bufferViews.at(indicesAccessor.bufferView);
+  size_t lengthOfTriangles = indicesAccessor.count;
+  uint16_t *meshIndices = reinterpret_cast<uint16_t *>(
+      buffer.data.data() + indicesAccessor.byteOffset +
+      indicesBufferView.byteOffset);
 
+  tinygltf::Accessor positionAccessor =
+      std::move(model.accessors.at(primitive.attributes["POSITION"]));
+  tinygltf::BufferView positionBufferView =
+      std::move(model.bufferViews.at(positionAccessor.bufferView));
+  float *vertices = reinterpret_cast<float *>(buffer.data.data() +
+                                              positionAccessor.byteOffset +
+                                              positionBufferView.byteOffset);
 
+  glm::vec3 centerOfMass = glm::vec3(0.0f);
+  float totalArea = 0.0f;
+
+  for (size_t triangleIndex = 0; triangleIndex < indicesAccessor.count;
+       triangleIndex += 3) {
+    float x1 = vertices[meshIndices[triangleIndex]];
+    float y1 = vertices[meshIndices[triangleIndex] + 1];
+    float z1 = vertices[meshIndices[triangleIndex] + 2];
+    glm::vec3 vertex1 = glm::vec3(x1, y1, z1);
+
+    float x2 = vertices[meshIndices[triangleIndex + 1]];
+    float y2 = vertices[meshIndices[triangleIndex + 1] + 1];
+    float z2 = vertices[meshIndices[triangleIndex + 1] + 2];
+    glm::vec3 vertex2 = glm::vec3(x2, y2, z2);
+
+    float x3 = vertices[meshIndices[triangleIndex + 2]];
+    float y3 = vertices[meshIndices[triangleIndex + 2] + 2];
+    float z3 = vertices[meshIndices[triangleIndex + 2] + 3];
+    glm::vec3 vertex3 = glm::vec3(x3, y3, z3);
+
+    glm::vec3 triangleCentroid = (vertex1 + vertex2 + vertex3) / 3.0f;
+    glm::vec3 a = vertex2 - vertex1;
+    glm::vec3 b = vertex3 - vertex1;
+    float area = (a * b).length() / 2.0f;
+    totalArea += area;
+    centerOfMass += area * triangleCentroid;
+  }
+  return centerOfMass / totalArea;
 }
