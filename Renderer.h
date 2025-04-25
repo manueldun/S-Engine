@@ -326,7 +326,7 @@ public:
   RenderObject(const std::vector<Node> &nodes, const tinygltf::Model& model);
   void setMatrix(const glm::mat4 &matrix, const uint32_t index);
   RenderObject(const RenderObject &other) = default;
-  glm::vec3 getCenterOfMass();
+  glm::vec3 getCenterOfMass(bool verbose);
 
 private:
   std::vector<Node> m_nodes;

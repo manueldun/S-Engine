@@ -97,21 +97,6 @@ void ParticleSystem::addParticle(const Particle &particle) {
 
 void ParticleSystem::addPlane(const Plane &plane) { m_planes.push_back(plane); }
 
-float CollisionShape::findMinimalStep(const CollisionShape &otherShape,
-                                      float minimumStep) {
-  throw std::runtime_error("findMinimalStep() not implemented yet");
-  float distance = glm::length(this->centerOfMass - otherShape.centerOfMass);
-  const int MAX_ITERATIONS = 100;
-  int iterations = 0;
-  do {
-    iterations++;
-    if (iterations >= MAX_ITERATIONS) {
-      throw std::runtime_error("more than 100 iterations in findMinimalStep()");
-    }
-    distance = glm::length(this->centerOfMass - otherShape.centerOfMass);
-  } while (minimumStep > distance);
-  return distance;
-}
 glm::vec3 ParticleSystem::getParticlePosition(const uint32_t index) {
   return m_particles.at(index).m_position;
 }

@@ -59,9 +59,8 @@ class CollisionShape {
 public:
   virtual ~CollisionShape();
   virtual bool collidesWith(const CollisionShape &otherShape) = 0;
-  float findMinimalStep(const CollisionShape &otherShape, float minimumStep);
 
 private:
-  glm::vec3 centerOfMass = glm::vec3(0.0f);
 };
+
 } // namespace Physics

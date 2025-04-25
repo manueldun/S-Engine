@@ -2038,9 +2038,11 @@ RenderObject Renderer::loadGLTF(std::string path) {
         vertexInputAttributeDescriptions.push_back(
             vertexInputAttributeDescription);
       }
-      uint32_t outputIndexTexture =
-          model.materials.at(primitive.material)
-              .pbrMetallicRoughness.baseColorTexture.index;
+      uint32_t outputIndexTexture = 0;
+      if (model.materials.size() > 0) {
+        outputIndexTexture = model.materials.at(primitive.material)
+                                 .pbrMetallicRoughness.baseColorTexture.index;
+      }
 
       VkPipeline pipeline = createGraphicPipeline(
           "./shaders/modelShader.vert", "./shaders/modelShader.frag",
@@ -2386,7 +2388,7 @@ void Renderer::endFrame() {
   glfwPollEvents();
 }
 
-glm::vec3 RenderObject::getCenterOfMass() {
+glm::vec3 RenderObject::getCenterOfMass(bool verbose) {
   tinygltf::Model model = m_model;
   tinygltf::Buffer buffer = model.buffers.at(0);
   tinygltf::Node node = model.nodes.at(0);
@@ -2395,15 +2397,17 @@ glm::vec3 RenderObject::getCenterOfMass() {
   tinygltf::Accessor indicesAccessor = model.accessors.at(primitive.indices);
   tinygltf::BufferView indicesBufferView =
       model.bufferViews.at(indicesAccessor.bufferView);
-  size_t lengthOfTriangles = indicesAccessor.count;
+
+  size_t numOfVertices = indicesAccessor.count;
+
   uint16_t *meshIndices = reinterpret_cast<uint16_t *>(
       buffer.data.data() + indicesAccessor.byteOffset +
       indicesBufferView.byteOffset);
 
   tinygltf::Accessor positionAccessor =
-      std::move(model.accessors.at(primitive.attributes["POSITION"]));
+      model.accessors.at(primitive.attributes["POSITION"]);
   tinygltf::BufferView positionBufferView =
-      std::move(model.bufferViews.at(positionAccessor.bufferView));
+      model.bufferViews.at(positionAccessor.bufferView);
   float *vertices = reinterpret_cast<float *>(buffer.data.data() +
                                               positionAccessor.byteOffset +
                                               positionBufferView.byteOffset);
@@ -2411,29 +2415,60 @@ glm::vec3 RenderObject::getCenterOfMass() {
   glm::vec3 centerOfMass = glm::vec3(0.0f);
   float totalArea = 0.0f;
 
-  for (size_t triangleIndex = 0; triangleIndex < indicesAccessor.count;
-       triangleIndex += 3) {
-    float x1 = vertices[meshIndices[triangleIndex]];
-    float y1 = vertices[meshIndices[triangleIndex] + 1];
-    float z1 = vertices[meshIndices[triangleIndex] + 2];
+  if (verbose) {
+    std::cout << "numOfTriangles: " << numOfVertices << std::endl;
+  }
+  for (size_t vertexIndex = 0; vertexIndex < numOfVertices; vertexIndex += 3) {
+    if(verbose)
+    {
+      std::cout << "vertexIndex: " << vertexIndex << std::endl;
+      std::cout << "indices" << std::endl;
+      std::cout << meshIndices[vertexIndex] << std::endl;
+      std::cout << meshIndices[vertexIndex + 1] << std::endl;
+      std::cout << meshIndices[vertexIndex + 2] << std::endl;
+    }
+
+    float x1 = vertices[meshIndices[vertexIndex] * 3];
+    float y1 = vertices[meshIndices[vertexIndex] * 3 + 1];
+    float z1 = vertices[meshIndices[vertexIndex] * 3 + 2];
     glm::vec3 vertex1 = glm::vec3(x1, y1, z1);
-
-    float x2 = vertices[meshIndices[triangleIndex + 1]];
-    float y2 = vertices[meshIndices[triangleIndex + 1] + 1];
-    float z2 = vertices[meshIndices[triangleIndex + 1] + 2];
+    if(verbose)
+    {
+      std::cout << "vec1" << std::endl;
+      std::cout << x1 << " " << y1 << " " << z1 << std::endl;
+    }
+    float x2 = vertices[meshIndices[vertexIndex + 1] * 3];
+    float y2 = vertices[meshIndices[vertexIndex + 1] * 3 + 1];
+    float z2 = vertices[meshIndices[vertexIndex + 1] * 3 + 2];
     glm::vec3 vertex2 = glm::vec3(x2, y2, z2);
-
-    float x3 = vertices[meshIndices[triangleIndex + 2]];
-    float y3 = vertices[meshIndices[triangleIndex + 2] + 2];
-    float z3 = vertices[meshIndices[triangleIndex + 2] + 3];
+    if(verbose)
+    {
+      std::cout << "vec2" << std::endl;
+      std::cout << x2 << " " << y2 << " " << z2 << std::endl;
+    }
+    float x3 = vertices[meshIndices[vertexIndex + 2] * 3];
+    float y3 = vertices[meshIndices[vertexIndex + 2] * 3 + 1];
+    float z3 = vertices[meshIndices[vertexIndex + 2] * 3 + 2];
     glm::vec3 vertex3 = glm::vec3(x3, y3, z3);
+    if(verbose)
+    {
+      std::cout << "vec3" << std::endl;
+      std::cout << x3 << " " << y3 << " " << z3 << std::endl;
+    }
 
     glm::vec3 triangleCentroid = (vertex1 + vertex2 + vertex3) / 3.0f;
+
+    std::cout << "centroid" << std::endl;
+    std::cout << triangleCentroid.x << " " << triangleCentroid.y << " "
+              << triangleCentroid.z << std::endl;
     glm::vec3 a = vertex2 - vertex1;
     glm::vec3 b = vertex3 - vertex1;
-    float area = (a * b).length() / 2.0f;
+    float area = glm::cross(a, b).length() / 2.0f;
     totalArea += area;
-    centerOfMass += area * triangleCentroid;
+    centerOfMass += triangleCentroid * area;
+    std::cout << "Acumulated center of mass:" << std::endl;
+    std::cout << centerOfMass.x << " " << centerOfMass.y << " "
+              << centerOfMass.z << std::endl;
   }
   return centerOfMass / totalArea;
 }
