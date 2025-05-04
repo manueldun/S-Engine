@@ -2419,8 +2419,7 @@ glm::vec3 RenderObject::getCenterOfMass(bool verbose) {
     std::cout << "numOfTriangles: " << numOfVertices << std::endl;
   }
   for (size_t vertexIndex = 0; vertexIndex < numOfVertices; vertexIndex += 3) {
-    if(verbose)
-    {
+    if (verbose) {
       std::cout << "vertexIndex: " << vertexIndex << std::endl;
       std::cout << "indices" << std::endl;
       std::cout << meshIndices[vertexIndex] << std::endl;
@@ -2432,8 +2431,7 @@ glm::vec3 RenderObject::getCenterOfMass(bool verbose) {
     float y1 = vertices[meshIndices[vertexIndex] * 3 + 1];
     float z1 = vertices[meshIndices[vertexIndex] * 3 + 2];
     glm::vec3 vertex1 = glm::vec3(x1, y1, z1);
-    if(verbose)
-    {
+    if (verbose) {
       std::cout << "vec1" << std::endl;
       std::cout << x1 << " " << y1 << " " << z1 << std::endl;
     }
@@ -2441,8 +2439,7 @@ glm::vec3 RenderObject::getCenterOfMass(bool verbose) {
     float y2 = vertices[meshIndices[vertexIndex + 1] * 3 + 1];
     float z2 = vertices[meshIndices[vertexIndex + 1] * 3 + 2];
     glm::vec3 vertex2 = glm::vec3(x2, y2, z2);
-    if(verbose)
-    {
+    if (verbose) {
       std::cout << "vec2" << std::endl;
       std::cout << x2 << " " << y2 << " " << z2 << std::endl;
     }
@@ -2450,25 +2447,28 @@ glm::vec3 RenderObject::getCenterOfMass(bool verbose) {
     float y3 = vertices[meshIndices[vertexIndex + 2] * 3 + 1];
     float z3 = vertices[meshIndices[vertexIndex + 2] * 3 + 2];
     glm::vec3 vertex3 = glm::vec3(x3, y3, z3);
-    if(verbose)
-    {
+    if (verbose) {
       std::cout << "vec3" << std::endl;
       std::cout << x3 << " " << y3 << " " << z3 << std::endl;
     }
 
     glm::vec3 triangleCentroid = (vertex1 + vertex2 + vertex3) / 3.0f;
 
-    std::cout << "centroid" << std::endl;
-    std::cout << triangleCentroid.x << " " << triangleCentroid.y << " "
-              << triangleCentroid.z << std::endl;
+    if (verbose) {
+      std::cout << "centroid" << std::endl;
+      std::cout << triangleCentroid.x << " " << triangleCentroid.y << " "
+                << triangleCentroid.z << std::endl;
+    }
     glm::vec3 a = vertex2 - vertex1;
     glm::vec3 b = vertex3 - vertex1;
     float area = glm::cross(a, b).length() / 2.0f;
     totalArea += area;
     centerOfMass += triangleCentroid * area;
-    std::cout << "Acumulated center of mass:" << std::endl;
-    std::cout << centerOfMass.x << " " << centerOfMass.y << " "
-              << centerOfMass.z << std::endl;
+    if (verbose) {
+      std::cout << "Acumulated center of mass:" << std::endl;
+      std::cout << centerOfMass.x << " " << centerOfMass.y << " "
+                << centerOfMass.z << std::endl;
+    }
   }
   return centerOfMass / totalArea;
 }
