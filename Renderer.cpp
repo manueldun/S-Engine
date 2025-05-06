@@ -5,6 +5,7 @@
 #include "glm/fwd.hpp"
 #include "glm/gtc/quaternion.hpp"
 #include "glm/gtc/type_ptr.hpp"
+#include "glm/matrix.hpp"
 #include "glm/trigonometric.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -2471,4 +2472,149 @@ glm::vec3 RenderObject::getCenterOfMass(bool verbose) {
     }
   }
   return centerOfMass / totalArea;
+}
+
+glm::mat4 RenderObject::getInertiaTensor(bool verbose) {
+
+  tinygltf::Model model = m_model;
+  tinygltf::Buffer buffer = model.buffers.at(0);
+  tinygltf::Node node = model.nodes.at(0);
+  tinygltf::Mesh mesh = model.meshes.at(node.mesh);
+  tinygltf::Primitive primitive = mesh.primitives.at(0);
+  tinygltf::Accessor indicesAccessor = model.accessors.at(primitive.indices);
+  tinygltf::BufferView indicesBufferView =
+      model.bufferViews.at(indicesAccessor.bufferView);
+
+  size_t numOfVertices = indicesAccessor.count;
+
+  uint16_t *meshIndices = reinterpret_cast<uint16_t *>(
+      buffer.data.data() + indicesAccessor.byteOffset +
+      indicesBufferView.byteOffset);
+
+  tinygltf::Accessor positionAccessor =
+      model.accessors.at(primitive.attributes["POSITION"]);
+  tinygltf::BufferView positionBufferView =
+      model.bufferViews.at(positionAccessor.bufferView);
+  float *vertices = reinterpret_cast<float *>(buffer.data.data() +
+                                              positionAccessor.byteOffset +
+                                              positionBufferView.byteOffset);
+
+  glm::mat3 acumulatedInertialTensor = glm::mat3(0.0f);
+
+  uint32_t numsOfTetrahedrons = 0;
+  for (size_t vertexIndex = 0; vertexIndex < numOfVertices; vertexIndex += 3) {
+
+    glm::vec3 vertex1 = glm::vec3(0.0f);
+    float x2 = vertices[meshIndices[vertexIndex] * 3];
+    float y2 = vertices[meshIndices[vertexIndex] * 3 + 1];
+    float z2 = vertices[meshIndices[vertexIndex] * 3 + 2];
+    glm::vec3 vertex2 = glm::vec3(x2, y2, z2);
+    float x3 = vertices[meshIndices[vertexIndex + 1] * 3];
+    float y3 = vertices[meshIndices[vertexIndex + 1] * 3 + 1];
+    float z3 = vertices[meshIndices[vertexIndex + 1] * 3 + 2];
+    glm::vec3 vertex3 = glm::vec3(x3, y3, z3);
+    float x4 = vertices[meshIndices[vertexIndex + 2] * 3];
+    float y4 = vertices[meshIndices[vertexIndex + 2] * 3 + 1];
+    float z4 = vertices[meshIndices[vertexIndex + 2] * 3 + 2];
+    glm::vec3 vertex4 = glm::vec3(x4, y4, z4);
+
+    glm::mat3 jacobian = glm::mat3(vertex2, vertex3, vertex4);
+    float det = glm::determinant(jacobian);
+
+    if (verbose) {
+      std::cout << "First Vertex: " << std::endl;
+      std::cout << vertex2.x << "\t" << vertex2.y << "\t" << vertex2.z
+                << std::endl;
+      std::cout << "Second Vertex: " << std::endl;
+      std::cout << vertex3.x << "\t" << vertex3.y << "\t" << vertex3.z
+                << std::endl;
+      std::cout << "Third Vertex: " << std::endl;
+      std::cout << vertex4.x << "\t" << vertex4.y << "\t" << vertex4.z
+                << std::endl;
+
+      std::cout << "Jacobian:" << std::endl;
+      std::cout << jacobian[0][0] << "\t" << jacobian[0][1] << "\t"
+                << jacobian[0][2] << "\t" << std::endl;
+
+      std::cout << jacobian[1][0] << "\t" << jacobian[1][1] << "\t"
+                << jacobian[1][2] << "\t" << std::endl;
+
+      std::cout << jacobian[2][0] << "\t" << jacobian[2][1] << "\t"
+                << jacobian[2][2] << "\t" << std::endl;
+    }
+    std::cout << "Determinant of the jacobian : " << det << std::endl;
+
+    float abcx = vertex1.x * vertex1.x + vertex1.x * vertex2.x +
+                 vertex2.x * vertex2.x + vertex1.x * vertex3.x +
+                 vertex2.x * vertex3.x + vertex3.x * vertex3.x +
+                 vertex1.x * vertex4.x + vertex2.x * vertex4.x +
+                 vertex3.x * vertex4.x + vertex4.x * vertex4.x;
+
+    float abcy = vertex1.y * vertex1.y + vertex1.y * vertex2.y +
+                 vertex2.y * vertex2.y + vertex1.y * vertex3.y +
+                 vertex2.y * vertex3.y + vertex3.y * vertex3.y +
+                 vertex1.y * vertex4.y + vertex2.y * vertex4.y +
+                 vertex3.y * vertex4.y + vertex4.y * vertex4.y;
+
+    float abcz = vertex1.z * vertex1.z + vertex1.z * vertex2.z +
+                 vertex2.z * vertex2.z + vertex1.z * vertex3.z +
+                 vertex2.z * vertex3.z + vertex3.z * vertex3.z +
+                 vertex1.z * vertex4.z + vertex2.z * vertex4.z +
+                 vertex3.z * vertex4.z + vertex4.z * vertex4.z;
+    float a = det * (abcy + abcz) / 60.0f;
+    float b = det * (abcx + abcz) / 60.0f;
+    float c = det * (abcx + abcy) / 60.0f;
+
+    float abcxp =
+        vertex2.y * vertex1.z + vertex3.y * vertex1.z + vertex4.y * vertex1.z +
+        vertex1.y * vertex2.z + vertex3.y * vertex2.z + vertex4.y * vertex2.z +
+        vertex1.y * vertex3.z + vertex2.y * vertex3.z + vertex4.y * vertex3.z +
+        vertex1.y * vertex4.z + vertex2.y * vertex4.z + vertex3.y * vertex4.z +
+        2.0f * vertex1.y * vertex1.z + 2.0f * vertex2.y * vertex2.z +
+        2.0f * vertex3.y * vertex3.z + 2.0f * vertex4.y * vertex4.z;
+
+    float abcyp =
+        vertex2.x * vertex1.z + vertex3.x * vertex1.z + vertex4.x * vertex1.z +
+        vertex1.x * vertex2.z + vertex3.x * vertex2.z + vertex4.x * vertex2.z +
+        vertex1.x * vertex3.z + vertex2.x * vertex3.z + vertex4.x * vertex3.z +
+        vertex1.x * vertex4.z + vertex2.x * vertex4.z + vertex3.x * vertex4.z +
+        2.0f * vertex1.x * vertex1.z + 2.0f * vertex2.x * vertex2.z +
+        2.0f * vertex3.x * vertex3.z + 2.0f * vertex4.x * vertex4.z;
+
+    float abczp =
+        vertex2.x * vertex1.y + vertex3.x * vertex1.y + vertex4.x * vertex1.y +
+        vertex1.x * vertex2.y + vertex3.x * vertex2.y + vertex4.x * vertex2.y +
+        vertex1.x * vertex3.y + vertex2.x * vertex3.y + vertex4.x * vertex3.y +
+        vertex1.x * vertex4.y + vertex2.x * vertex4.y + vertex3.x * vertex4.y +
+        2.0f * vertex1.x * vertex1.y + 2.0f * vertex2.x * vertex2.y +
+        2.0f * vertex3.x * vertex3.y + 2.0f * vertex4.x * vertex4.y;
+
+    float ap = det * abcxp / 120.0f;
+    float bp = det * abcyp / 120.0f;
+    float cp = det * abczp / 120.0f;
+
+    float tetrahedronInertiaTensorArray[] = {a,   -bp, -cp, -bp, b,
+                                             -ap, -cp, -ap, c};
+    glm::mat3 tetrahedronInertiaTensor =
+        glm::make_mat3(tetrahedronInertiaTensorArray);
+    if (verbose) {
+
+      std::cout << "Tetrahedron inertial tensor:" << std::endl;
+      std::cout << tetrahedronInertiaTensor[0][0] << "\t"
+                << tetrahedronInertiaTensor[0][1] << "\t"
+                << tetrahedronInertiaTensor[0][2] << "\t" << std::endl;
+
+      std::cout << tetrahedronInertiaTensor[1][0] << "\t"
+                << tetrahedronInertiaTensor[1][1] << "\t"
+                << tetrahedronInertiaTensor[1][2] << "\t" << std::endl;
+
+      std::cout << tetrahedronInertiaTensor[2][0] << "\t"
+                << tetrahedronInertiaTensor[2][1] << "\t"
+                << tetrahedronInertiaTensor[2][2] << "\t" << std::endl;
+    }
+    acumulatedInertialTensor += tetrahedronInertiaTensor;
+    numsOfTetrahedrons++;
+  }
+  std::cout << "Number of tetrahedrons: " << numsOfTetrahedrons << std::endl;
+  return acumulatedInertialTensor;
 }

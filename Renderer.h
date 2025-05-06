@@ -327,6 +327,7 @@ public:
   void setMatrix(const glm::mat4 &matrix, const uint32_t index);
   RenderObject(const RenderObject &other) = default;
   glm::vec3 getCenterOfMass(bool verbose);
+  glm::mat4 getInertiaTensor(bool verbose);
 
 private:
   std::vector<Node> m_nodes;
