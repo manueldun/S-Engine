@@ -2561,9 +2561,9 @@ glm::mat4 RenderObject::getInertiaTensor(bool verbose) {
                  vertex2.z * vertex3.z + vertex3.z * vertex3.z +
                  vertex1.z * vertex4.z + vertex2.z * vertex4.z +
                  vertex3.z * vertex4.z + vertex4.z * vertex4.z;
-    float a = det * (abcy + abcz) / 60.0f;
-    float b = det * (abcx + abcz) / 60.0f;
-    float c = det * (abcx + abcy) / 60.0f;
+    float a = (det * (abcy + abcz) / 60.0f) / (det / 6.0);
+    float b = (det * (abcx + abcz) / 60.0f) / (det / 6.0);
+    float c = (det * (abcx + abcy) / 60.0f) / (det / 6.0);
 
     float abcxp =
         vertex2.y * vertex1.z + vertex3.y * vertex1.z + vertex4.y * vertex1.z +
@@ -2599,7 +2599,7 @@ glm::mat4 RenderObject::getInertiaTensor(bool verbose) {
         glm::make_mat3(tetrahedronInertiaTensorArray);
     if (verbose) {
 
-      std::cout << "Tetrahedron inertial tensor:" << std::endl;
+      std::cout << "Acumulated tetrahedron inertial tensor:" << std::endl;
       std::cout << tetrahedronInertiaTensor[0][0] << "\t"
                 << tetrahedronInertiaTensor[0][1] << "\t"
                 << tetrahedronInertiaTensor[0][2] << "\t" << std::endl;
@@ -2616,5 +2616,5 @@ glm::mat4 RenderObject::getInertiaTensor(bool verbose) {
     numsOfTetrahedrons++;
   }
   std::cout << "Number of tetrahedrons: " << numsOfTetrahedrons << std::endl;
-  return acumulatedInertialTensor;
+  return acumulatedInertialTensor / static_cast<float>(numsOfTetrahedrons);
 }
