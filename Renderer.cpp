@@ -2589,9 +2589,9 @@ glm::mat4 RenderObject::getInertiaTensor(bool verbose) {
         2.0f * vertex1.x * vertex1.y + 2.0f * vertex2.x * vertex2.y +
         2.0f * vertex3.x * vertex3.y + 2.0f * vertex4.x * vertex4.y;
 
-    float ap = det * abcxp / 120.0f;
-    float bp = det * abcyp / 120.0f;
-    float cp = det * abczp / 120.0f;
+    float ap = (det * abcxp / 120.0f) / (det / 6.0);
+    float bp = (det * abcyp / 120.0f) / (det / 6.0);
+    float cp = (det * abczp / 120.0f) / (det / 6.0);
 
     float tetrahedronInertiaTensorArray[] = {a,   -bp, -cp, -bp, b,
                                              -ap, -cp, -ap, c};

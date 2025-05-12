@@ -13,10 +13,11 @@ int main(int argc, char **argv) {
     /*    app.loadGLTF("/home/manuel/Documents/assets/"*/
     /*                 "KayKit_DungeonRemastered_1.1_FREE/Assets/"*/
     /*                 "gltf/table_small.gltf");*/
-    
+
     RenderObject coin = app.loadGLTF("/home/manuel/3d-assets/"
                                      "KayKit_DungeonRemastered_1.1_FREE/Assets/"
                                      "gltf/coin.gltf");
+    RenderObject cube = app.loadGLTF("/home/manuel/3d-assets/test_assets/cube.gltf");
     Physics::ParticleSystem particleSystem;
 
     Physics::Plane floor(glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));

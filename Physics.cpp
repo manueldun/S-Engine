@@ -100,4 +100,33 @@ void ParticleSystem::addPlane(const Plane &plane) { m_planes.push_back(plane); }
 glm::vec3 ParticleSystem::getParticlePosition(const uint32_t index) {
   return m_particles.at(index).m_position;
 }
+RigidBody::RigidBody(float mass, glm::mat3 Ibody, glm::vec3 initialPosition,
+                     glm::mat3 initialOrientation, glm::vec3 initialVelocity,
+                     glm::vec3 initialAngularVelocity)
+    : m_mass(mass), m_Ibody(Ibody), m_IbodyInv(glm::inverse(Ibody)),
+      m_position(initialPosition), m_orientation(initialOrientation),
+
+      m_Iinv(initialOrientation * m_IbodyInv *
+             glm::transpose(initialOrientation)),
+
+      m_velocity(initialVelocity), m_angularVelocity(initialAngularVelocity) {}
+State Physics::RigidBody::getDerivative(glm::vec3 forces, glm::vec3 torques) {
+  State derivativeState = {};
+  derivativeState.m_position = m_velocity;
+  derivativeState.m_orientation = star(m_angularVelocity) * m_orientation;
+  derivativeState.m_linearMomentum = forces;
+  derivativeState.m_angularMomentum = torques;
+  return derivativeState;
+}
+void RigidBody::eulerStep(float delta) {
+  State derivativeState = getDerivative(m_force, m_torque);
+}
+void RigidBody::addForcesAndTorques(glm::vec3 force, glm::vec3 torque) {
+  m_force += force;
+  m_torque += torque;
+}
+glm::mat3 star(glm::vec3 a) {
+  return glm::mat3(glm::vec3(0.0f, -a.z, a.y), glm::vec3(a.z, 0.0f, -a.x),
+                   glm::vec3(-a.y, a.x, 0.0f));
+}
 } // namespace Physics
