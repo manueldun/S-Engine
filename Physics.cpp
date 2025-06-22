@@ -1,6 +1,7 @@
 #include "Physics.h"
 #include "glm/common.hpp"
 #include "glm/geometric.hpp"
+#include "glm/gtc/quaternion.hpp"
 #include <iostream>
 #include <stdexcept>
 namespace Physics {
@@ -101,32 +102,68 @@ glm::vec3 ParticleSystem::getParticlePosition(const uint32_t index) {
   return m_particles.at(index).m_position;
 }
 RigidBody::RigidBody(float mass, glm::mat3 Ibody, glm::vec3 initialPosition,
-                     glm::mat3 initialOrientation, glm::vec3 initialVelocity,
+                     glm::quat initialOrientation, glm::vec3 initialVelocity,
                      glm::vec3 initialAngularVelocity)
     : m_mass(mass), m_Ibody(Ibody), m_IbodyInv(glm::inverse(Ibody)),
       m_position(initialPosition), m_orientation(initialOrientation),
+      m_linearMomentum(initialVelocity * m_mass),
+      m_angularMomentum(Ibody * initialAngularVelocity)
 
-      m_Iinv(initialOrientation * m_IbodyInv *
-             glm::transpose(initialOrientation)),
-
-      m_velocity(initialVelocity), m_angularVelocity(initialAngularVelocity) {}
+{}
 State Physics::RigidBody::getDerivative(glm::vec3 forces, glm::vec3 torques) {
   State derivativeState = {};
-  derivativeState.m_position = m_velocity;
-  derivativeState.m_orientation = star(m_angularVelocity) * m_orientation;
-  derivativeState.m_linearMomentum = forces;
-  derivativeState.m_angularMomentum = torques;
+  derivativeState.m_velocity = getVelocity();
+  derivativeState.m_angularVelocity = getAngularVelocity();
+  derivativeState.m_forces = forces;
+  derivativeState.m_torques = torques;
   return derivativeState;
 }
 void RigidBody::eulerStep(float delta) {
   State derivativeState = getDerivative(m_force, m_torque);
+  m_position = m_position + delta * derivativeState.m_velocity;
+  m_orientation =
+      (0.5f * delta * derivativeState.m_angularVelocity) * m_orientation;
+  m_linearMomentum = m_linearMomentum + delta * derivativeState.m_forces;
+  m_angularMomentum = m_angularMomentum + delta * derivativeState.m_torques;
+  m_time += delta;
 }
 void RigidBody::addForcesAndTorques(glm::vec3 force, glm::vec3 torque) {
   m_force += force;
   m_torque += torque;
 }
+void RigidBody::clearForcesAndTorques() {
+  m_force = glm::vec3(0.0f);
+  m_torque = glm::vec3(0.0f);
+}
+glm::vec3 RigidBody::getPosition() { return m_position; }
+
+glm::quat RigidBody::getOrientation() { return m_orientation; }
 glm::mat3 star(glm::vec3 a) {
   return glm::mat3(glm::vec3(0.0f, -a.z, a.y), glm::vec3(a.z, 0.0f, -a.x),
                    glm::vec3(-a.y, a.x, 0.0f));
+}
+glm::vec3 RigidBody::getVelocity() { return m_linearMomentum / m_mass; }
+glm::mat3 RigidBody::getInvInertialTensor() {
+  glm::mat3 orientation = glm::mat3_cast(m_orientation);
+  return orientation * m_IbodyInv * glm::transpose(orientation);
+}
+glm::mat3 RigidBody::getInertialTensor() {
+  glm::mat3 orientation = glm::mat3_cast(m_orientation);
+  return orientation * m_Ibody * glm::transpose(orientation);
+}
+glm::vec3 RigidBody::getAngularVelocity() {
+  return (getInvInertialTensor() * m_angularMomentum);
+}
+void RigidBodySystem::eulerStep(float delta) {
+
+  for (RigidBody *rigidBody : m_rigidBodies) {
+    rigidBody->addForcesAndTorques(glm::vec3(0.0f, 0.0f, 0.0f),
+                                   glm::vec3(0.0f));
+    rigidBody->eulerStep(delta);
+    rigidBody->clearForcesAndTorques();
+  }
+}
+void RigidBodySystem::addRigidBody(RigidBody *rigidBody) {
+  m_rigidBodies.push_back(rigidBody);
 }
 } // namespace Physics

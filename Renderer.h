@@ -1,6 +1,6 @@
 #pragma once
-#include "imgui_impl_vulkan.h"
 #include "glm/fwd.hpp"
+#include "imgui_impl_vulkan.h"
 #include "tiny_gltf.h"
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
@@ -14,13 +14,12 @@
 #include <string>
 #include <vector>
 
-static void check_vk_result(VkResult err)
-{
-    if (err == 0)
-        return;
-    fprintf(stderr, "[vulkan] Error: VkResult = %d\n", err);
-    if (err < 0)
-        abort();
+static void check_vk_result(VkResult err) {
+  if (err == 0)
+    return;
+  fprintf(stderr, "[vulkan] Error: VkResult = %d\n", err);
+  if (err < 0)
+    abort();
 }
 
 struct UniformBufferObject {
@@ -159,9 +158,11 @@ public:
   void destroy();
   bool shouldExit();
   void draw(RenderObject *renderObject);
+  void drawLabel(std::string* label);
   void endFrame();
 
 private:
+  std::vector<std::string*> m_guiLabels;
   void initWindow();
   static void framebufferResizeCallback(GLFWwindow *window, int width,
                                         int height);
@@ -323,7 +324,7 @@ class RenderObject {
 public:
   friend class Renderer;
   RenderObject() = delete;
-  RenderObject(const std::vector<Node> &nodes, const tinygltf::Model& model);
+  RenderObject(const std::vector<Node> &nodes, const tinygltf::Model &model);
   void setMatrix(const glm::mat4 &matrix, const uint32_t index);
   RenderObject(const RenderObject &other) = default;
   glm::vec3 getCenterOfMass(bool verbose);

@@ -1,8 +1,11 @@
 #pragma once
 #include "glm/fwd.hpp"
 #include "glm/glm.hpp"
+#define GLM_ENABLE_EXPERIMENTAL
+#include "glm/gtx/quaternion.hpp"
 #include <array>
 #include <istream>
+#include <sys/wait.h>
 #include <vector>
 namespace Physics {
 
@@ -63,19 +66,21 @@ public:
 private:
 };
 struct State {
-  glm::vec3 m_position;
-  glm::mat3 m_orientation;
-  glm::vec3 m_linearMomentum;
-  glm::vec3 m_angularMomentum;
+  glm::vec3 m_velocity;
+  glm::vec3 m_angularVelocity;
+  glm::vec3 m_forces;
+  glm::vec3 m_torques;
 };
 class RigidBody {
 public:
   RigidBody(float mass, glm::mat3 Ibody, glm::vec3 initialPosition,
-            glm::mat3 initialOrientation, glm::vec3 initialVelocity,
-            glm::vec3 initialAngularMomentum);
+            glm::quat initialOrientation, glm::vec3 initialVelocity, glm::vec3 initialAngularMomentum);
   State getDerivative(glm::vec3 forces, glm::vec3 torques);
   void eulerStep(float delta);
   void addForcesAndTorques(glm::vec3 force, glm::vec3 torque);
+  void clearForcesAndTorques();
+  glm::vec3 getPosition();
+  glm::quat getOrientation();
 
 private:
   const float m_mass;
@@ -83,16 +88,27 @@ private:
   const glm::mat3 m_IbodyInv;
   // state variables
   glm::vec3 m_position;
-  glm::mat3 m_orientation;
-  glm::vec3 m_linearMomentum = glm::vec3(0.0f);
-  glm::vec3 m_angularMomentum = glm::vec3(0.0f);
+  glm::quat m_orientation;
+  glm::vec3 m_linearMomentum;
+  glm::vec3 m_angularMomentum;
   // derived quantities
-  glm::mat3 m_Iinv;
-  glm::vec3 m_velocity;
-  glm::vec3 m_angularVelocity;
+  glm::mat3 getInvInertialTensor();
+  glm::mat3 getInertialTensor();
+  glm::vec3 getVelocity();
+  glm::vec3 getAngularVelocity();
   // computed quantities
   glm::vec3 m_force = glm::vec3(0.0f);
   glm::vec3 m_torque = glm::vec3(0.0f);
+
+  float m_time = 0.0f;
 };
 glm::mat3 star(glm::vec3 a);
+class RigidBodySystem {
+public:
+  void eulerStep(float delta);
+  void addRigidBody(RigidBody *rigidBody);
+
+private:
+  std::vector<RigidBody *> m_rigidBodies;
+};
 } // namespace Physics

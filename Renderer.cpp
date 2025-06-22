@@ -2170,7 +2170,10 @@ void Renderer::recordSceneCommandBuffer(const VkCommandBuffer &commandBuffer,
   ImGui_ImplGlfw_NewFrame();
 
   ImGui::NewFrame();
-  ImGui::ShowDemoWindow();
+  /*ImGui::ShowDemoWindow();*/
+  for (const std::string* value : m_guiLabels) {
+    ImGui::LabelText("label", value->c_str());
+  } 
 
   ImGui::Render();
   ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
@@ -2382,10 +2385,12 @@ void Renderer::draw(RenderObject *renderObject) {
     m_pNodeToDraw.push_back(&node);
   }
 }
+void Renderer::drawLabel(std::string* label) { m_guiLabels.push_back(label); }
 void Node::setMatrix(const glm::mat4 &matrix) { m_matrix = matrix; }
 void Renderer::endFrame() {
   drawFrame();
   m_pNodeToDraw.clear();
+  m_guiLabels.clear();
   glfwPollEvents();
 }
 
