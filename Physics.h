@@ -74,7 +74,8 @@ struct State {
 class RigidBody {
 public:
   RigidBody(float mass, glm::mat3 Ibody, glm::vec3 initialPosition,
-            glm::quat initialOrientation, glm::vec3 initialVelocity, glm::vec3 initialAngularMomentum);
+            glm::quat initialOrientation, glm::vec3 initialVelocity,
+            glm::vec3 initialAngularMomentum);
   State getDerivative(glm::vec3 forces, glm::vec3 torques);
   void eulerStep(float delta);
   void addForcesAndTorques(glm::vec3 force, glm::vec3 torque);
@@ -108,6 +109,7 @@ public:
   void eulerStep(float delta);
   void addRigidBody(RigidBody *rigidBody);
 
+  static constexpr float c_gravity = 9.8f;
 private:
   std::vector<RigidBody *> m_rigidBodies;
 };

@@ -25,29 +25,28 @@ int main(int argc, char **argv) {
     Physics::RigidBodySystem system;
     Physics::RigidBody coinBody(
         1.0f, glm::mat3(1.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::mat3(1.0f),
-        glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 30.0f, 0.0f));
+        glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f, 3.0f, 0.0f));
     system.addRigidBody(&coinBody);
 
-    auto startTime = std::chrono::high_resolution_clock::now();
-    std::this_thread::sleep_for(std::chrono::milliseconds(33));
-    auto currentTime = std::chrono::high_resolution_clock::now();
+    auto startTime = std::chrono::system_clock::now();
+    auto currentTime = std::chrono::system_clock::now();
+    std::chrono::duration deltaTime = currentTime-startTime;
     while (!app.shouldExit()) {
 
-      currentTime = std::chrono::high_resolution_clock::now();
-      float deltaTime =
-          std::chrono::duration<float, std::chrono::seconds::period>(
-              currentTime - startTime)
-              .count();
-
+      currentTime = std::chrono::system_clock::now();
       glm::mat4 coinMat =
           glm::translate(glm::mat4(1.0f), coinBody.getPosition());
       coinMat = coinMat * glm::mat4(coinBody.getOrientation());
-
+      deltaTime = currentTime - startTime;
       coin.setMatrix(coinMat, 0);
-      system.eulerStep(deltaTime);
+      while (deltaTime > std::chrono::milliseconds(16)) {
+        system.eulerStep(std::chrono::milliseconds(16).count()/1000.0f);
+        startTime += deltaTime;
+        deltaTime -= std::chrono::milliseconds(16);
+      }
 
       app.draw(&coin);
-      std::string coinHeight = std::to_string(coinBody.getOrientation()[2]);
+      std::string coinHeight = std::to_string(deltaTime.count());
       app.drawLabel(&coinHeight);
 
       app.endFrame();

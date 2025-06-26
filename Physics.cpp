@@ -114,7 +114,8 @@ State Physics::RigidBody::getDerivative(glm::vec3 forces, glm::vec3 torques) {
   State derivativeState = {};
   derivativeState.m_velocity = getVelocity();
   derivativeState.m_angularVelocity = getAngularVelocity();
-  derivativeState.m_forces = forces;
+  derivativeState.m_forces = forces + glm::vec3(0.0f, 0.0f, -1.0f) *
+                                          RigidBodySystem::c_gravity * m_mass;
   derivativeState.m_torques = torques;
   return derivativeState;
 }
