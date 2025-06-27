@@ -14,7 +14,7 @@ public:
   friend class ParticleSystem;
   ParticleDerivative() = delete;
   ParticleDerivative(const glm::vec3 &dPosition, const glm::vec3 &dVelocity);
-  void scale(const float scaleConstant);
+  void scale(const float &scaleConstant);
 
 private:
   glm::vec3 m_dPosition;
@@ -24,34 +24,33 @@ class Plane {
 public:
   Plane() = delete;
   friend class ParticleSystem;
-  Plane(glm::vec3 point, glm::vec3 normal);
+  Plane(const glm::vec3 &point, const glm::vec3 &normal);
 
 private:
-  glm::vec3 m_point;
-  glm::vec3 m_normal;
+  const glm::vec3 m_point;
+  const glm::vec3 m_normal;
 };
 class Particle {
 public:
   friend class ParticleSystem;
   Particle() = delete;
   Particle(const glm::vec3 &initialPosition, const glm::vec3 &initialVelocity,
-           const glm::vec3 &initialForceAccumulator, const float m_mass);
-  ParticleDerivative getDerivatives(const glm::vec3 &force);
+           const glm::vec3 &initialForceAccumulator, const float &m_mass);
+  const ParticleDerivative getDerivatives(const glm::vec3 &force);
   glm::vec3 getPosition();
 
 private:
-  float m_mass;
+  const float m_mass;
   glm::vec3 m_position;
   glm::vec3 m_velocity;
   glm::vec3 m_forceAcumulator;
 };
 class ParticleSystem {
 public:
-  ParticleSystem() = default;
-  void eulerStep(const float delta);
+  void eulerStep(const float &delta);
   void addParticle(const Particle &particle);
   void addPlane(const Plane &plane);
-  glm::vec3 getParticlePosition(const uint32_t index);
+  glm::vec3 getParticlePosition(const uint32_t &index) const;
 
 private:
   float m_simulationClock;
@@ -73,15 +72,25 @@ struct State {
 };
 class RigidBody {
 public:
-  RigidBody(float mass, glm::mat3 Ibody, glm::vec3 initialPosition,
-            glm::quat initialOrientation, glm::vec3 initialVelocity,
-            glm::vec3 initialAngularMomentum);
-  State getDerivative(glm::vec3 forces, glm::vec3 torques);
-  void eulerStep(float delta);
-  void addForcesAndTorques(glm::vec3 force, glm::vec3 torque);
+  RigidBody(const float &mass, const glm::mat3 &Ibody,
+            const glm::vec3 &initialPosition,
+            const glm::quat &initialOrientation,
+            const glm::vec3 &initialVelocity,
+            const glm::vec3 &initialAngularMomentum);
+  RigidBody(const float &mass, const glm::mat3 &Ibody,
+            const glm::vec3 &initialPosition,
+            const glm::quat &initialOrientation,
+            const glm::vec3 &initialVelocity,
+            const glm::vec3 &initialAngularMomentum,
+            const std::vector<float> &vertices);
+  const State getDerivative(const glm::vec3 &forces,
+                            const glm::vec3 &torques) const;
+  void eulerStep(const float &delta);
+  void addForcesAndTorques(const glm::vec3 &force, const glm::vec3 &torque);
   void clearForcesAndTorques();
-  glm::vec3 getPosition();
-  glm::quat getOrientation();
+  glm::vec3 getPosition() const;
+  glm::quat getOrientation() const;
+  bool doesIntersect(const RigidBody &rigidBody) const;
 
 private:
   const float m_mass;
@@ -93,24 +102,25 @@ private:
   glm::vec3 m_linearMomentum;
   glm::vec3 m_angularMomentum;
   // derived quantities
-  glm::mat3 getInvInertialTensor();
-  glm::mat3 getInertialTensor();
-  glm::vec3 getVelocity();
-  glm::vec3 getAngularVelocity();
-  // computed quantities
+  glm::mat3 getInertialTensor() const;
+  glm::mat3 getInvInertialTensor() const;
+  glm::vec3 getVelocity() const;
+  glm::vec3 getAngularVelocity() const;
+  // computed quantiti)s
   glm::vec3 m_force = glm::vec3(0.0f);
   glm::vec3 m_torque = glm::vec3(0.0f);
 
   float m_time = 0.0f;
 };
-glm::mat3 star(glm::vec3 a);
 class RigidBodySystem {
 public:
-  void eulerStep(float delta);
+  void eulerStep(const float &delta);
   void addRigidBody(RigidBody *rigidBody);
 
   static constexpr float c_gravity = 9.8f;
+
 private:
   std::vector<RigidBody *> m_rigidBodies;
 };
+glm::mat3 star(const glm::vec3 &a);
 } // namespace Physics

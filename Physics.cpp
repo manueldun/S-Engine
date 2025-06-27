@@ -4,32 +4,33 @@
 #include "glm/gtc/quaternion.hpp"
 #include <iostream>
 #include <stdexcept>
+#include <sys/wait.h>
 namespace Physics {
 ParticleDerivative::ParticleDerivative(const glm::vec3 &dPosition,
                                        const glm::vec3 &dVelocity)
     : m_dPosition(dPosition), m_dVelocity(dVelocity) {}
 
-void ParticleDerivative::scale(const float scaleConstant) {
+void ParticleDerivative::scale(const float &scaleConstant) {
   m_dPosition = m_dPosition * scaleConstant;
 }
 
-Plane::Plane(glm::vec3 point, glm::vec3 normal)
+Plane::Plane(const glm::vec3 &point, const glm::vec3 &normal)
     : m_point(point), m_normal(normal) {}
 
 Particle::Particle(const glm::vec3 &initialPosition,
                    const glm::vec3 &initialVelocity,
-                   const glm::vec3 &initialForceAccumulator, const float mass)
+                   const glm::vec3 &initialForceAccumulator, const float &mass)
     : m_mass(mass), m_position(initialPosition), m_velocity(initialVelocity),
       m_forceAcumulator(initialForceAccumulator) {}
 
-ParticleDerivative Particle::getDerivatives(const glm::vec3 &force) {
+const ParticleDerivative Particle::getDerivatives(const glm::vec3 &force) {
   m_forceAcumulator = force;
   return ParticleDerivative(m_velocity, m_forceAcumulator / m_mass);
 }
 
 glm::vec3 Particle::getPosition() { return m_position; }
 
-void ParticleSystem::eulerStep(const float time) {
+void ParticleSystem::eulerStep(const float &time) {
   static float lastTime = time;
   static float delta = time - lastTime;
   delta = time - lastTime;
@@ -83,7 +84,7 @@ void ParticleSystem::eulerStep(const float time) {
         nextParticle.m_position = nextPosition;
       }
 
-      m_particles = nextParticles;
+      m_particles = std::move(nextParticles);
 
       particleIndex++;
     }
@@ -98,19 +99,34 @@ void ParticleSystem::addParticle(const Particle &particle) {
 
 void ParticleSystem::addPlane(const Plane &plane) { m_planes.push_back(plane); }
 
-glm::vec3 ParticleSystem::getParticlePosition(const uint32_t index) {
+glm::vec3 ParticleSystem::getParticlePosition(const uint32_t &index) const {
   return m_particles.at(index).m_position;
 }
-RigidBody::RigidBody(float mass, glm::mat3 Ibody, glm::vec3 initialPosition,
-                     glm::quat initialOrientation, glm::vec3 initialVelocity,
-                     glm::vec3 initialAngularVelocity)
+RigidBody::RigidBody(const float &mass, const glm::mat3 &Ibody,
+                     const glm::vec3 &initialPosition,
+                     const glm::quat &initialOrientation,
+                     const glm::vec3 &initialVelocity,
+                     const glm::vec3 &initialAngularVelocity)
     : m_mass(mass), m_Ibody(Ibody), m_IbodyInv(glm::inverse(Ibody)),
       m_position(initialPosition), m_orientation(initialOrientation),
       m_linearMomentum(initialVelocity * m_mass),
       m_angularMomentum(Ibody * initialAngularVelocity)
 
 {}
-State Physics::RigidBody::getDerivative(glm::vec3 forces, glm::vec3 torques) {
+RigidBody::RigidBody(const float &mass, const glm::mat3 &Ibody,
+                     const glm::vec3 &initialPosition,
+                     const glm::quat &initialOrientation,
+                     const glm::vec3 &initialVelocity,
+                     const glm::vec3 &initialAngularVelocity,
+                     const std::vector<float> &vertices)
+    : m_mass(mass), m_Ibody(Ibody), m_IbodyInv(glm::inverse(Ibody)),
+      m_position(initialPosition), m_orientation(initialOrientation),
+      m_linearMomentum(initialVelocity * m_mass),
+      m_angularMomentum(Ibody * initialAngularVelocity)
+
+{}
+const State Physics::RigidBody::getDerivative(const glm::vec3 &forces,
+                                              const glm::vec3 &torques) const {
   State derivativeState = {};
   derivativeState.m_velocity = getVelocity();
   derivativeState.m_angularVelocity = getAngularVelocity();
@@ -119,7 +135,7 @@ State Physics::RigidBody::getDerivative(glm::vec3 forces, glm::vec3 torques) {
   derivativeState.m_torques = torques;
   return derivativeState;
 }
-void RigidBody::eulerStep(float delta) {
+void RigidBody::eulerStep(const float &delta) {
   State derivativeState = getDerivative(m_force, m_torque);
   m_position = m_position + delta * derivativeState.m_velocity;
   m_orientation =
@@ -128,7 +144,8 @@ void RigidBody::eulerStep(float delta) {
   m_angularMomentum = m_angularMomentum + delta * derivativeState.m_torques;
   m_time += delta;
 }
-void RigidBody::addForcesAndTorques(glm::vec3 force, glm::vec3 torque) {
+void RigidBody::addForcesAndTorques(const glm::vec3 &force,
+                                    const glm::vec3 &torque) {
   m_force += force;
   m_torque += torque;
 }
@@ -136,26 +153,26 @@ void RigidBody::clearForcesAndTorques() {
   m_force = glm::vec3(0.0f);
   m_torque = glm::vec3(0.0f);
 }
-glm::vec3 RigidBody::getPosition() { return m_position; }
+glm::vec3 RigidBody::getPosition() const { return m_position; }
 
-glm::quat RigidBody::getOrientation() { return m_orientation; }
-glm::mat3 star(glm::vec3 a) {
-  return glm::mat3(glm::vec3(0.0f, -a.z, a.y), glm::vec3(a.z, 0.0f, -a.x),
-                   glm::vec3(-a.y, a.x, 0.0f));
+glm::quat RigidBody::getOrientation() const { return m_orientation; }
+bool RigidBody::doesIntersect(const RigidBody &rigidBody) const {
+  throw std::runtime_error("intersection test not implemented yet");
+  return false;
 }
-glm::vec3 RigidBody::getVelocity() { return m_linearMomentum / m_mass; }
-glm::mat3 RigidBody::getInvInertialTensor() {
-  glm::mat3 orientation = glm::mat3_cast(m_orientation);
-  return orientation * m_IbodyInv * glm::transpose(orientation);
-}
-glm::mat3 RigidBody::getInertialTensor() {
+glm::mat3 RigidBody::getInertialTensor() const {
   glm::mat3 orientation = glm::mat3_cast(m_orientation);
   return orientation * m_Ibody * glm::transpose(orientation);
 }
-glm::vec3 RigidBody::getAngularVelocity() {
+glm::mat3 RigidBody::getInvInertialTensor() const {
+  glm::mat3 orientation = glm::mat3_cast(m_orientation);
+  return orientation * m_IbodyInv * glm::transpose(orientation);
+}
+glm::vec3 RigidBody::getVelocity() const { return m_linearMomentum / m_mass; }
+glm::vec3 RigidBody::getAngularVelocity() const {
   return (getInvInertialTensor() * m_angularMomentum);
 }
-void RigidBodySystem::eulerStep(float delta) {
+void RigidBodySystem::eulerStep(const float &delta) {
 
   for (RigidBody *rigidBody : m_rigidBodies) {
     rigidBody->addForcesAndTorques(glm::vec3(0.0f, 0.0f, 0.0f),
@@ -166,5 +183,9 @@ void RigidBodySystem::eulerStep(float delta) {
 }
 void RigidBodySystem::addRigidBody(RigidBody *rigidBody) {
   m_rigidBodies.push_back(rigidBody);
+}
+glm::mat3 star(const glm::vec3 &a) {
+  return glm::mat3(glm::vec3(0.0f, -a.z, a.y), glm::vec3(a.z, 0.0f, -a.x),
+                   glm::vec3(-a.y, a.x, 0.0f));
 }
 } // namespace Physics

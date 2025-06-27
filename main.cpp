@@ -2,13 +2,11 @@
 #include "Renderer.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/fwd.hpp"
-#include "imgui_impl_glfw.h"
 #include <chrono>
 #include <cstdlib>
 #include <glm/common.hpp>
 #include <iostream>
 #include <string>
-#include <thread>
 int main(int argc, char **argv) {
   try {
     Renderer app;
