@@ -1,8 +1,8 @@
 #pragma once
+#include "stb_image.h"
 #include "glm/fwd.hpp"
 #include "imgui_impl_vulkan.h"
 #include "tiny_gltf.h"
-#include <format>
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -157,7 +157,7 @@ class Renderer {
 public:
   friend class RenderObject;
   Renderer();
-  RenderObject loadGLTF(const std::string &path);
+  RenderObject loadModel(const tinygltf::Model &model);
   bool shouldExit();
   void draw(RenderObject *const fmrenderObject);
   void drawLabel(const std::string *label);
@@ -177,7 +177,7 @@ private:
   void pickPhysicalDevice();
   bool isDeviceSuitable(VkPhysicalDevice device);
   bool checkDeviceExtensionSupport(
-      const VkPhysicalDevice &device); // delete this coment 
+      const VkPhysicalDevice &device); // delete this coment
 
   void createLogicalDevice();
   void createVMA();
@@ -189,7 +189,6 @@ private:
   VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities);
   QueueFamilyIndices findQueueFamilies(const VkPhysicalDevice &device);
   SwapChainSupportDetails querySwapChainSupport(const VkPhysicalDevice &device);
-  
 
   void createImageViews();
   VkImageView createImageView(const VkImage &image, const VkFormat &format,
@@ -230,7 +229,6 @@ private:
 
   void initImGui();
 
-
   static void framebufferResizeCallback(GLFWwindow *window, int width,
                                         int height);
 
@@ -268,8 +266,6 @@ private:
   void resizeDescriptorSets();
   bool hasStencilComponent(VkFormat format);
 
-
-
   GLFWwindow *m_window;
   VkSurfaceKHR m_surface;
   VkInstance m_instance;
@@ -285,6 +281,7 @@ private:
   VkFormat m_swapChainImageFormat;
   std::vector<VkImage> m_swapChainImages;
   std::vector<VkImageView> m_swapChainImageViews;
+  uint32_t m_imageCount;
   VkRenderPass m_renderPass;
 
   VkImage m_depthImage;
@@ -308,7 +305,7 @@ private:
   VkBuffer m_indexBuffer;
   std::vector<VkCommandBuffer> m_commandBuffers;
   std::vector<VkSemaphore> m_imageAvailableSemaphores;
-  std::vector<VkSemaphore> renderFinishedSemaphores;
+  std::vector<VkSemaphore> m_renderFinishedSemaphores;
   std::vector<VkFence> m_inFlightFences;
   bool m_framebufferResized = false;
 
@@ -319,7 +316,6 @@ private:
   const std::vector<const char *> validationLayers = {
       "VK_LAYER_KHRONOS_validation"};
 
-  const size_t MAX_FRAMES_IN_FLIGHT = 2;
 #ifdef NDEBUG
   const bool enableValidationLayers = false;
 #else
@@ -327,7 +323,6 @@ private:
 #endif
   std::vector<const char *> extensions;
   VkDebugUtilsMessengerEXT m_debugMessenger;
-
 
   VkPipeline m_pipeline;
   VkPipelineLayout m_pipelineLayout;
@@ -346,7 +341,6 @@ private:
 
   std::vector<glm::mat4> m_modelMatrices;
   std::vector<Node *> m_pNodeToDraw;
-
 };
 
 class RenderObject {
@@ -363,4 +357,3 @@ private:
   std::vector<Node> m_nodes;
   tinygltf::Model m_model;
 };
-

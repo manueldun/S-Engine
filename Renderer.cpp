@@ -21,18 +21,12 @@
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
 
-#define TINYGLTF_IMPLEMENTATION
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "tiny_gltf.h"
-
 #include "utils.h"
 #include <algorithm> // Necessary for std::clamp
 #include <cassert>
 #include <cstdint> // Necessary for uint32_t
 #include <cstdlib>
 #include <cstring>
-#include <fstream>
 #include <iostream>
 #include <limits> // Necessary for std::numeric_limits
 #include <set>
@@ -132,6 +126,7 @@ void Renderer::initVulkan() {
   createSurface();
   pickPhysicalDevice();
   createLogicalDevice();
+  createSyncObjects();
   createVMA();
   createSwapChain();
   createImageViews();
@@ -148,7 +143,6 @@ void Renderer::initVulkan() {
   allocateUboDescriptorSets();
   createIndexBuffer();
   createCommandBuffer();
-  createSyncObjects();
 }
 
 std::vector<const char *> Renderer::getRequiredExtensions() {
@@ -187,7 +181,7 @@ void Renderer::createInstance() {
 
   std::vector<const char *> extensions(glfwExtensions,
                                        glfwExtensions + glfwExtensionCount);
-  
+
   extensions.push_back("VK_EXT_debug_utils");
   instanceCreateInfo.enabledExtensionCount =
       static_cast<uint32_t>(extensions.size());
@@ -215,7 +209,6 @@ void Renderer::setupDebugMessenger() {
   debugUtilsMessengerCreateInfo.sType =
       VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
   debugUtilsMessengerCreateInfo.messageSeverity =
-      VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
       VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
       VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
   debugUtilsMessengerCreateInfo.messageType =
@@ -407,20 +400,20 @@ void Renderer::createSwapChain() {
 
   VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
-  uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+  uint32_t m_imageCount = swapChainSupport.capabilities.minImageCount + 1;
 
   if (swapChainSupport.capabilities.maxImageCount != 0) {
     if (swapChainSupport.capabilities.minImageCount > 0 &&
-        imageCount > swapChainSupport.capabilities.maxImageCount) {
+        m_imageCount > swapChainSupport.capabilities.maxImageCount) {
 
-      imageCount = swapChainSupport.capabilities.maxImageCount;
+      m_imageCount = swapChainSupport.capabilities.maxImageCount;
     }
   }
 
   VkSwapchainCreateInfoKHR swapchainCreateInfo{};
   swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
   swapchainCreateInfo.surface = m_surface;
-  swapchainCreateInfo.minImageCount = imageCount;
+  swapchainCreateInfo.minImageCount = m_imageCount;
   swapchainCreateInfo.imageFormat = surfaceFormat.format;
   swapchainCreateInfo.imageColorSpace = surfaceFormat.colorSpace;
   swapchainCreateInfo.imageExtent = extent;
@@ -456,9 +449,9 @@ void Renderer::createSwapChain() {
     throw std::runtime_error("failed to create swapchain!");
   }
 
-  vkGetSwapchainImagesKHR(m_device, m_swapchain, &imageCount, nullptr);
-  m_swapChainImages.resize(imageCount);
-  vkGetSwapchainImagesKHR(m_device, m_swapchain, &imageCount,
+  vkGetSwapchainImagesKHR(m_device, m_swapchain, &m_imageCount, nullptr);
+  m_swapChainImages.resize(m_imageCount);
+  vkGetSwapchainImagesKHR(m_device, m_swapchain, &m_imageCount,
                           m_swapChainImages.data());
   m_swapChainImageFormat = surfaceFormat.format;
   swapChainExtent = extent;
@@ -1104,11 +1097,11 @@ void Renderer::createIndexBuffer() {
 
 void Renderer::createUniformBuffers() {
   VkDeviceSize bufferSize = sizeof(UniformBufferObject);
-  m_uboBuffer.resize(MAX_FRAMES_IN_FLIGHT);
-  m_uboAllocation.resize(MAX_FRAMES_IN_FLIGHT);
-  m_uniformBufferMapped.resize(MAX_FRAMES_IN_FLIGHT);
+  m_uboBuffer.resize(m_imageCount);
+  m_uboAllocation.resize(m_imageCount);
+  m_uniformBufferMapped.resize(m_imageCount);
 
-  for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+  for (size_t i = 0; i < m_imageCount; i++) {
     createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                  VMA_MEMORY_USAGE_AUTO,
                  VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
@@ -1157,7 +1150,7 @@ uint32_t Renderer::findMemoryType(const uint32_t &typeFilter,
 }
 
 void Renderer::createCommandBuffer() {
-  m_commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+  m_commandBuffers.resize(m_imageCount);
   VkCommandBufferAllocateInfo commandBufferAllocInfo{};
   commandBufferAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
   commandBufferAllocInfo.commandPool = m_commandPool;
@@ -1171,9 +1164,9 @@ void Renderer::createCommandBuffer() {
 }
 
 void Renderer::createSyncObjects() {
-  m_imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-  renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-  m_inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+  m_imageAvailableSemaphores.resize(m_imageCount);
+  m_renderFinishedSemaphores.resize(m_imageCount);
+  m_inFlightFences.resize(m_imageCount);
 
   VkSemaphoreCreateInfo semaphoreCreateInfo{};
   semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -1182,12 +1175,12 @@ void Renderer::createSyncObjects() {
   fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
   fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-  for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+  for (size_t i = 0; i < m_imageCount; i++) {
 
     if (vkCreateSemaphore(m_device, &semaphoreCreateInfo, nullptr,
                           &m_imageAvailableSemaphores[i]) != VK_SUCCESS ||
         vkCreateSemaphore(m_device, &semaphoreCreateInfo, nullptr,
-                          &renderFinishedSemaphores[i]) != VK_SUCCESS ||
+                          &m_renderFinishedSemaphores[i]) != VK_SUCCESS ||
         vkCreateFence(m_device, &fenceCreateInfo, nullptr,
                       &m_inFlightFences[i]) != VK_SUCCESS) {
       throw std::runtime_error("failed to create sync objects");
@@ -1218,8 +1211,8 @@ void Renderer::initImGui() {
   init_info.Queue = m_queue;
   // init_info.PipelineCache = YOUR_PIPELINE_CACHE;
   init_info.DescriptorPool = m_firstDescriptorPool;
-  init_info.MinImageCount = MAX_FRAMES_IN_FLIGHT;
-  init_info.ImageCount = MAX_FRAMES_IN_FLIGHT;
+  init_info.MinImageCount = m_imageCount;
+  init_info.ImageCount = m_imageCount;
   init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
   init_info.CheckVkResultFn = check_vk_result;
 
@@ -1373,7 +1366,7 @@ void Renderer::drawFrame() {
   ImGui::NewFrame();
   /*ImGui::ShowDemoWindow();*/
   for (const std::string *value : m_guiLabels) {
-    ImGui::LabelText("label", value->c_str());
+    ImGui::LabelText("label", "%s", value->c_str());
   }
 
   ImGui::Render();
@@ -1397,7 +1390,7 @@ void Renderer::drawFrame() {
   submitInfo.commandBufferCount = 1;
   submitInfo.pCommandBuffers = &m_commandBuffers[m_currentFrame];
   submitInfo.signalSemaphoreCount = 1;
-  submitInfo.pSignalSemaphores = &renderFinishedSemaphores[m_currentFrame];
+  submitInfo.pSignalSemaphores = &m_renderFinishedSemaphores[m_currentFrame];
 
   if (vkQueueSubmit(m_queue, 1, &submitInfo,
                     m_inFlightFences[m_currentFrame]) != VK_SUCCESS) {
@@ -1406,7 +1399,7 @@ void Renderer::drawFrame() {
   VkPresentInfoKHR presentInfo{};
   presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
   presentInfo.waitSemaphoreCount = 1;
-  presentInfo.pWaitSemaphores = &renderFinishedSemaphores[m_currentFrame];
+  presentInfo.pWaitSemaphores = &m_renderFinishedSemaphores[m_currentFrame];
 
   VkSwapchainKHR swapchains[] = {m_swapchain};
   presentInfo.swapchainCount = 1;
@@ -1422,7 +1415,7 @@ void Renderer::drawFrame() {
   } else if (result != VK_SUCCESS) {
     throw std::runtime_error("failed to present swap chain image!");
   }
-  m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+  m_currentFrame = (m_currentFrame + 1) % m_imageCount;
 }
 
 void Renderer::drawGui() {
@@ -1620,7 +1613,7 @@ void Renderer::cleanup() {
 
   vkDestroyRenderPass(m_device, m_renderPass, nullptr);
 
-  for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+  for (size_t i = 0; i < m_imageCount; i++) {
     vmaDestroyBuffer(m_vmaAllocator, m_uboBuffer[i], m_uboAllocation[i]);
   }
 
@@ -1633,8 +1626,8 @@ void Renderer::cleanup() {
 
   vmaDestroyBuffer(m_vmaAllocator, m_vertexBuffer, m_vertexAllocation);
 
-  for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-    vkDestroySemaphore(m_device, renderFinishedSemaphores[i], nullptr);
+  for (size_t i = 0; i < m_imageCount; i++) {
+    vkDestroySemaphore(m_device, m_renderFinishedSemaphores[i], nullptr);
     vkDestroySemaphore(m_device, m_imageAvailableSemaphores[i], nullptr);
     vkDestroyFence(m_device, m_inFlightFences[i], nullptr);
   }
@@ -1710,25 +1703,7 @@ void DestroyDebugUtilsMessengerEXT(
     func(instance, debugMessenger, pAllocator);
   }
 }
-RenderObject Renderer::loadGLTF(const std::string &path) {
-  tinygltf::Model model;
-  tinygltf::TinyGLTF loader;
-  std::string err;
-  std::string warn;
-
-  bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, path);
-
-  if (!warn.empty()) {
-    std::cout << "Warn: " << warn << std::endl;
-  }
-
-  if (!ret) {
-    throw std::runtime_error("Error loading gltf file");
-  }
-
-  if (!err.empty()) {
-    std::cout << "Error: " << err << std::endl;
-  }
+RenderObject Renderer::loadModel(const tinygltf::Model &model) {
 
   m_loadedTextures.reserve(model.images.size() + m_loadedTextures.size());
 
@@ -1854,7 +1829,7 @@ RenderObject Renderer::loadGLTF(const std::string &path) {
                    stagingBuffer, stagingAllocation);
 
       void *data;
-      std::vector<unsigned char> &buffer =
+      std::vector<unsigned char> buffer =
           model.buffers.at(indexBufferView.buffer).data;
 
       vmaMapMemory(m_vmaAllocator, stagingAllocation, &data);
@@ -2206,7 +2181,7 @@ void Renderer::resizeDescriptorSets() {
       glm::radians(45.0f),
       swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
   ubo.projection[1][1] *= -1.0f;
-  for (uint32_t currentImage = 0; currentImage < MAX_FRAMES_IN_FLIGHT;
+  for (uint32_t currentImage = 0; currentImage < m_imageCount;
        currentImage++) {
     memcpy(m_uniformBufferMapped[currentImage], &ubo, sizeof(ubo));
   }
@@ -2252,11 +2227,11 @@ void Renderer::createDescriptorSetLayouts() {
 void Renderer::createDescriptorPool() {
   std::array<VkDescriptorPoolSize, 2> poolSizes{};
   poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-  poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+  poolSizes[0].descriptorCount = static_cast<uint32_t>(m_imageCount);
 
   poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   poolSizes[1].descriptorCount =
-      static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 100;
+      static_cast<uint32_t>(m_imageCount) * 100;
 
   VkDescriptorPoolCreateInfo descriptorPoolCreateInfo{};
   descriptorPoolCreateInfo.sType =
@@ -2265,7 +2240,7 @@ void Renderer::createDescriptorPool() {
       static_cast<uint32_t>(poolSizes.size());
   descriptorPoolCreateInfo.pPoolSizes = poolSizes.data();
   descriptorPoolCreateInfo.maxSets =
-      static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 90;
+      static_cast<uint32_t>(m_imageCount) * 90;
 
   if (vkCreateDescriptorPool(m_device, &descriptorPoolCreateInfo, nullptr,
                              &m_firstDescriptorPool) != VK_SUCCESS) {
@@ -2274,12 +2249,12 @@ void Renderer::createDescriptorPool() {
 }
 void Renderer::allocateUboDescriptorSets() {
 
-  m_uboDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-  std::vector<VkWriteDescriptorSet> writes(MAX_FRAMES_IN_FLIGHT);
-  m_uboBuffer.resize(MAX_FRAMES_IN_FLIGHT);
-  m_uboAllocation.resize(MAX_FRAMES_IN_FLIGHT);
-  m_uniformBufferMapped.resize(MAX_FRAMES_IN_FLIGHT);
-  for (size_t frameIndex = 0; frameIndex < MAX_FRAMES_IN_FLIGHT; frameIndex++) {
+  m_uboDescriptorSets.resize(m_imageCount);
+  std::vector<VkWriteDescriptorSet> writes(m_imageCount);
+  m_uboBuffer.resize(m_imageCount);
+  m_uboAllocation.resize(m_imageCount);
+  m_uniformBufferMapped.resize(m_imageCount);
+  for (size_t frameIndex = 0; frameIndex < m_imageCount; frameIndex++) {
 
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo{};
     descriptorSetAllocateInfo.sType =
@@ -2327,9 +2302,9 @@ void Renderer::allocateUboDescriptorSets() {
 std::vector<VkDescriptorSet>
 Renderer::allocateTextureDescriptorSet(const VkImageView &imageview,
                                        const VkSampler &sampler) {
-  std::vector<VkDescriptorSet> descriptorSets(MAX_FRAMES_IN_FLIGHT);
-  std::vector<VkWriteDescriptorSet> writes(MAX_FRAMES_IN_FLIGHT);
-  for (size_t frameIndex = 0; frameIndex < MAX_FRAMES_IN_FLIGHT; frameIndex++) {
+  std::vector<VkDescriptorSet> descriptorSets(m_imageCount);
+  std::vector<VkWriteDescriptorSet> writes(m_imageCount);
+  for (size_t frameIndex = 0; frameIndex < m_imageCount; frameIndex++) {
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo{};
     descriptorSetAllocateInfo.sType =
         VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -2460,7 +2435,8 @@ glm::vec3 RenderObject::getCenterOfMass(const bool &verbose) const {
     }
     glm::vec3 a = vertex2 - vertex1;
     glm::vec3 b = vertex3 - vertex1;
-    float area = glm::cross(a, b).length() / 2.0f;
+    glm::vec3 crossVector{glm::cross(a, b)};
+    float area{crossVector.length() / 2.0f};
     totalArea += area;
     centerOfMass += triangleCentroid * area;
     if (verbose) {
