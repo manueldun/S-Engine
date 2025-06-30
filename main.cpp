@@ -24,12 +24,19 @@ int main(int argc, char **argv) {
         loadGltfFile("/home/manuel/3d-assets/KayKit_DungeonRemastered_1.1_FREE/"
                      "Assets/gltf/coin.gltf");
     RenderObject coin = app.loadModel(model);
-    RenderObject cube =
-        app.loadModel(model);
+    RenderObject cube = app.loadModel(model);
+
+    std::vector<std::span<glm::vec3>> coinVertices =
+        getVerticeData(model, "POSITION");
+    IndexDataSpan indexSpan = getIndexSpans(model).at(0);
+    glm::vec3 centerOfMass =
+        getCenterOfMass(coinVertices.at(0), indexSpan, false);
+
     Physics::RigidBodySystem system;
     Physics::RigidBody coinBody(
         1.0f, glm::mat3(1.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::mat3(1.0f),
-        glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f, 3.0f, 0.0f));
+        glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f, 3.0f, 0.0f),
+        coinVertices.at(0));
     system.addRigidBody(&coinBody);
 
     auto startTime = std::chrono::system_clock::now();

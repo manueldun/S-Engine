@@ -118,11 +118,11 @@ RigidBody::RigidBody(const float &mass, const glm::mat3 &Ibody,
                      const glm::quat &initialOrientation,
                      const glm::vec3 &initialVelocity,
                      const glm::vec3 &initialAngularVelocity,
-                     const std::vector<float> &vertices)
+                     const std::span<glm::vec3> &vertices)
     : m_mass(mass), m_Ibody(Ibody), m_IbodyInv(glm::inverse(Ibody)),
       m_position(initialPosition), m_orientation(initialOrientation),
       m_linearMomentum(initialVelocity * m_mass),
-      m_angularMomentum(Ibody * initialAngularVelocity)
+      m_angularMomentum(Ibody * initialAngularVelocity),m_vertices(vertices)
 
 {}
 const State Physics::RigidBody::getDerivative(const glm::vec3 &forces,

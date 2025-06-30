@@ -13,7 +13,7 @@ std::vector<char> readFile(const std::string &filename) {
     throw std::runtime_error("failed to open file!");
   }
 
-  size_t fileSize = (size_t)file.tellg();
+  size_t fileSize{(size_t)file.tellg()};
   std::vector<char> buffer(fileSize);
 
   file.seekg(0);
@@ -28,10 +28,10 @@ std::vector<char> readFile(const std::string &filename) {
 constexpr bool isTowardsPlaneNormal(std::array<glm::vec3, 3> trianglePlane,
                                     glm::vec3 point) {
 
-  glm::vec3 triangleEdge1 = trianglePlane[1] - trianglePlane[0];
-  glm::vec3 triangleEdge2 = trianglePlane[2] - trianglePlane[0];
-  glm::vec3 normal = glm::cross(triangleEdge1, triangleEdge2);
-  float dotProduct = glm::dot(normal, point);
+  glm::vec3 triangleEdge1{trianglePlane[1] - trianglePlane[0]};
+  glm::vec3 triangleEdge2{trianglePlane[2] - trianglePlane[0]};
+  glm::vec3 normal{glm::cross(triangleEdge1, triangleEdge2)};
+  float dotProduct{glm::dot(normal, point)};
   return dotProduct > 0.0f;
 }
 
@@ -56,6 +56,7 @@ tinygltf::Model loadGltfFile(const std::string &path) {
   }
   return model;
 }
+
 std::vector<std::span<glm::vec3>>
 getVerticeData(const tinygltf::Model &model, const std::string &attributeName) {
   std::vector<std::span<glm::vec3>> bufferSpans;
@@ -102,33 +103,41 @@ getVerticeData(const tinygltf::Model &model, const std::string &attributeName) {
 
   return bufferSpans;
 }
-template <typename T> std::span<T> IndexDataSpan::getIndexSpan() {
+IndexDataSpan::IndexDataSpan(const std::span<uint8_t> &indexSpan,
+                             const uint8_t &bytesperInt)
+    : m_indexSpan(indexSpan), m_bytesPerInt(bytesperInt) {}
+std::span<uint8_t> IndexDataSpan::getIndexSpan() const {
 
-  switch (m_bytesPerInt) {
-  case 1: {
-    uint8_t *intptr{reinterpret_cast<uint8_t *>(m_indexSpan.data())};
-    size_t indexLength = m_indexSpan.size();
-    return std::span<uint8_t>(intptr, intptr + indexLength);
+  uint8_t *intptr{reinterpret_cast<uint8_t *>(m_indexSpan.data())};
+  size_t indexLength = m_indexSpan.size();
+  return std::span<uint8_t>(intptr, intptr + indexLength);
+}
+constexpr int getByteWidthFromComponentType(const int &componentType) {
+
+  switch (componentType) {
+  case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE: {
+    return 1;
     break;
   }
-  case 2: {
-    uint16_t *intptr{reinterpret_cast<uint16_t *>(m_indexSpan.data())};
-    size_t indexLength = m_indexSpan.size() / 2;
-    return std::span<uint16_t>(intptr, intptr + indexLength);
+  case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT: {
+    return 2;
     break;
   }
-  case 4: {
-    uint32_t *intptr{reinterpret_cast<uint32_t *>(m_indexSpan.data())};
-    size_t indexLength = m_indexSpan.size();
-    return std::span<uint32_t>(intptr, intptr + indexLength);
+  case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT: {
+    return 4;
     break;
+  }
+  default: {
+    return 0;
   }
   }
 }
-template <typename T>
-std::vector<std::span<T>> getIndexData(const tinygltf::Model &model) {
+constexpr uint8_t IndexDataSpan::getBytesPerInt() const {
+  return m_bytesPerInt;
+}
+std::vector<IndexDataSpan> getIndexSpans(const tinygltf::Model &model) {
 
-  std::vector<std::span<T>> bufferSpans;
+  std::vector<IndexDataSpan> bufferSpans;
 
   for (const tinygltf::Node &node : model.nodes) {
     tinygltf::Mesh mesh = model.meshes[node.mesh];
@@ -141,38 +150,45 @@ std::vector<std::span<T>> getIndexData(const tinygltf::Model &model) {
       tinygltf::BufferView bufferView = model.bufferViews[bufferViewIndex];
       const int bufferIndex = bufferView.buffer;
       tinygltf::Buffer buffer{model.buffers[bufferIndex]};
-      size_t componentBytes;
-      switch (accessor.componentType) {
-      case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE: {
-        componentBytes = 1;
-        const size_t numberOfIndices = bufferView.byteLength / componentBytes;
-        uint8_t *intPtr = reinterpret_cast<uint8_t *>(buffer.data.data());
-        std::span<uint8_t> bufferSpan(intPtr, numberOfIndices);
-        bufferSpans.push_back(bufferSpan);
-        break;
-      }
-      case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT: {
-        componentBytes = 2;
-        const size_t numberOfIndices = bufferView.byteLength / componentBytes;
-        uint16_t *intPtr = reinterpret_cast<uint16_t *>(buffer.data.data());
-        std::span<uint16_t> bufferSpan(intPtr, numberOfIndices);
-        bufferSpans.push_back(bufferSpan);
-        break;
-      }
-      case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT: {
-        componentBytes = 4;
-        const size_t numberOfIndices = bufferView.byteLength / componentBytes;
-        uint32_t *intPtr = reinterpret_cast<uint32_t *>(buffer.data.data());
-        std::span<uint32_t> bufferSpan(intPtr, numberOfIndices);
-        bufferSpans.push_back(bufferSpan);
-        break;
-      }
-      }
+
+      int componentBytes{getByteWidthFromComponentType(accessor.componentType)};
+
+      uint8_t *intPtr = reinterpret_cast<uint8_t *>(buffer.data.data());
+      std::span<uint8_t> bufferSpan(intPtr, intPtr + bufferView.byteLength);
+      bufferSpans.push_back(IndexDataSpan(bufferSpan, componentBytes));
       assert(accessor.type == TINYGLTF_TYPE_SCALAR);
     }
   }
 
   return bufferSpans;
+}
+constexpr glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
+                                    const IndexDataSpan &dataSpan,
+                                    const bool &verbose) {
+  switch (dataSpan.getBytesPerInt()) {
+  case 1: {
+    return getCenterOfMass<uint8_t>(vertices, dataSpan.getIndexSpan(), verbose);
+  } break;
+  case 2: {
+    uint16_t *intPtr =
+        reinterpret_cast<uint16_t *>(dataSpan.getIndexSpan().data());
+    size_t numberOfIndices{dataSpan.getIndexSpan().size() /
+                           dataSpan.getBytesPerInt()};
+    std::span<uint16_t> span16(intPtr, intPtr + numberOfIndices);
+    return getCenterOfMass<uint16_t>(vertices, span16, verbose);
+    break;
+  }
+  case 3: {
+    uint32_t *intPtr =
+        reinterpret_cast<uint32_t *>(dataSpan.getIndexSpan().data());
+    auto numberOfIndices{dataSpan.getIndexSpan().size() /
+                         dataSpan.getBytesPerInt()};
+    std::span<uint32_t> span16(intPtr, intPtr + numberOfIndices);
+    return getCenterOfMass<uint32_t>(vertices, span16, verbose);
+  } break;
+  default:
+    assert(false);
+  }
 }
 template <typename T>
 constexpr glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,

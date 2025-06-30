@@ -4,6 +4,7 @@
 #include "glm/gtx/quaternion.hpp"
 #include <sys/wait.h>
 #include <vector>
+#include <span>
 namespace Physics {
 
 class ParticleDerivative {
@@ -79,7 +80,7 @@ public:
             const glm::quat &initialOrientation,
             const glm::vec3 &initialVelocity,
             const glm::vec3 &initialAngularMomentum,
-            const std::vector<float> &vertices);
+            const std::span<glm::vec3> &vertices);
   const State getDerivative(const glm::vec3 &forces,
                             const glm::vec3 &torques) const;
   void eulerStep(const float &delta);
@@ -108,6 +109,8 @@ private:
   glm::vec3 m_torque = glm::vec3(0.0f);
 
   float m_time = 0.0f;
+
+  std::span<glm::vec3> m_vertices;
 };
 class RigidBodySystem {
 public:
