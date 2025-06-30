@@ -2,16 +2,13 @@
 #include "Renderer.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/fwd.hpp"
+#include "tiny_gltf.h"
 #include "utils.h"
 #include <chrono>
 #include <cstdlib>
 #include <glm/common.hpp>
 #include <iostream>
 #include <string>
-#define TINYGLTF_IMPLEMENTATION
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "tiny_gltf.h"
 int main(int argc, char **argv) {
   try {
     Renderer app;
@@ -28,9 +25,9 @@ int main(int argc, char **argv) {
 
     std::vector<std::span<glm::vec3>> coinVertices =
         getVerticeData(model, "POSITION");
-    IndexDataSpan indexSpan = getIndexSpans(model).at(0);
-    glm::vec3 centerOfMass =
-        getCenterOfMass(coinVertices.at(0), indexSpan, false);
+    const IndexDataSpan &indexSpan = getIndexSpans(model).at(0);
+    const std::span<glm::vec3> &verticeSpan{coinVertices.at(0)};
+    glm::vec3 centerOfMass{getCenterOfMass(verticeSpan, indexSpan, false)};
 
     Physics::RigidBodySystem system;
     Physics::RigidBody coinBody(

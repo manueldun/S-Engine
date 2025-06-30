@@ -6,6 +6,11 @@
 #include <fstream>
 #include <iostream>
 #include <span>
+#define TINYGLTF_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "tiny_gltf.h"
+
 std::vector<char> readFile(const std::string &filename) {
   std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
@@ -103,14 +108,13 @@ getVerticeData(const tinygltf::Model &model, const std::string &attributeName) {
 
   return bufferSpans;
 }
-IndexDataSpan::IndexDataSpan(const std::span<uint8_t> &indexSpan,
-                             const uint8_t &bytesperInt)
-    : m_indexSpan(indexSpan), m_bytesPerInt(bytesperInt) {}
-std::span<uint8_t> IndexDataSpan::getIndexSpan() const {
+constexpr IndexDataSpan::IndexDataSpan(const std::span<uint8_t> &indexSpan,
+                                       const uint8_t &bytesperInt)
+    : m_indexSpan{indexSpan}, m_bytesPerInt{bytesperInt} {}
 
-  uint8_t *intptr{reinterpret_cast<uint8_t *>(m_indexSpan.data())};
-  size_t indexLength = m_indexSpan.size();
-  return std::span<uint8_t>(intptr, intptr + indexLength);
+constexpr std::span<uint8_t> IndexDataSpan::getIndexSpan() const {
+
+  return m_indexSpan;
 }
 constexpr int getByteWidthFromComponentType(const int &componentType) {
 
@@ -162,9 +166,11 @@ std::vector<IndexDataSpan> getIndexSpans(const tinygltf::Model &model) {
 
   return bufferSpans;
 }
-constexpr glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
+
+glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
                                     const IndexDataSpan &dataSpan,
                                     const bool &verbose) {
+
   switch (dataSpan.getBytesPerInt()) {
   case 1: {
     return getCenterOfMass<uint8_t>(vertices, dataSpan.getIndexSpan(), verbose);
@@ -190,6 +196,7 @@ constexpr glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
     assert(false);
   }
 }
+
 template <typename T>
 constexpr glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
                                     const std::span<T> &indices,
