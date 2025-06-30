@@ -2,11 +2,16 @@
 #include "Renderer.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/fwd.hpp"
+#include "utils.h"
 #include <chrono>
 #include <cstdlib>
 #include <glm/common.hpp>
 #include <iostream>
 #include <string>
+#define TINYGLTF_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "tiny_gltf.h"
 int main(int argc, char **argv) {
   try {
     Renderer app;
@@ -15,11 +20,12 @@ int main(int argc, char **argv) {
     /*                 "KayKit_DungeonRemastered_1.1_FREE/Assets/"*/
     /*                 "gltf/table_small.gltf");*/
 
-    RenderObject coin = app.loadGLTF("/home/manuel/3d-assets/"
-                                     "KayKit_DungeonRemastered_1.1_FREE/Assets/"
-                                     "gltf/coin.gltf");
+    const tinygltf::Model model =
+        loadGltfFile("/home/manuel/3d-assets/KayKit_DungeonRemastered_1.1_FREE/"
+                     "Assets/gltf/coin.gltf");
+    RenderObject coin = app.loadModel(model);
     RenderObject cube =
-        app.loadGLTF("/home/manuel/3d-assets/test_assets/cube.gltf");
+        app.loadModel(model);
     Physics::RigidBodySystem system;
     Physics::RigidBody coinBody(
         1.0f, glm::mat3(1.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::mat3(1.0f),
@@ -28,7 +34,7 @@ int main(int argc, char **argv) {
 
     auto startTime = std::chrono::system_clock::now();
     auto currentTime = std::chrono::system_clock::now();
-    std::chrono::duration deltaTime = currentTime-startTime;
+    std::chrono::duration deltaTime = currentTime - startTime;
     while (!app.shouldExit()) {
 
       currentTime = std::chrono::system_clock::now();
@@ -38,7 +44,7 @@ int main(int argc, char **argv) {
       deltaTime = currentTime - startTime;
       coin.setMatrix(coinMat, 0);
       while (deltaTime > std::chrono::milliseconds(16)) {
-        system.eulerStep(std::chrono::milliseconds(16).count()/1000.0f);
+        system.eulerStep(std::chrono::milliseconds(16).count() / 1000.0f);
         startTime += deltaTime;
         deltaTime -= std::chrono::milliseconds(16);
       }
