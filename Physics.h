@@ -1,10 +1,7 @@
 #pragma once
 #include "glm/fwd.hpp"
-#include "glm/glm.hpp"
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/quaternion.hpp"
-#include <array>
-#include <istream>
 #include <sys/wait.h>
 #include <vector>
 namespace Physics {
@@ -106,7 +103,7 @@ private:
   glm::mat3 getInvInertialTensor() const;
   glm::vec3 getVelocity() const;
   glm::vec3 getAngularVelocity() const;
-  // computed quantiti)s
+  // computed quantities
   glm::vec3 m_force = glm::vec3(0.0f);
   glm::vec3 m_torque = glm::vec3(0.0f);
 
