@@ -1,10 +1,12 @@
 #pragma once
+#include "Renderer.h"
+#include "glm/ext/vector_float3.hpp"
 #include "glm/fwd.hpp"
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/quaternion.hpp"
+#include <span>
 #include <sys/wait.h>
 #include <vector>
-#include <span>
 namespace Physics {
 
 class ParticleDerivative {
@@ -74,13 +76,14 @@ public:
             const glm::vec3 &initialPosition,
             const glm::quat &initialOrientation,
             const glm::vec3 &initialVelocity,
-            const glm::vec3 &initialAngularMomentum);
-  RigidBody(const float &mass, const glm::mat3 &Ibody,
-            const glm::vec3 &initialPosition,
-            const glm::quat &initialOrientation,
-            const glm::vec3 &initialVelocity,
-            const glm::vec3 &initialAngularMomentum,
-            const std::span<glm::vec3> &vertices);
+            const glm::vec3 &initialAngularVelocity);
+  RigidBody(const tinygltf::Model &model, const float &mass,
+            const glm::mat3 &Ibody = glm::mat3(0.0f),
+            const glm::vec3 &initialPosition = glm::vec3(0.0f),
+            const glm::quat &initialOrientation = glm::quat(0.0f, 0.0f, 0.0f,
+                                                            1.0f),
+            const glm::vec3 &initialVelocity = glm::vec3(0.0f),
+            const glm::vec3 &initialAngularVelocity = glm::vec3(0.0f));
   const State getDerivative(const glm::vec3 &forces,
                             const glm::vec3 &torques) const;
   void eulerStep(const float &delta);
@@ -115,12 +118,19 @@ private:
 class RigidBodySystem {
 public:
   void eulerStep(const float &delta);
-  void addRigidBody(RigidBody *rigidBody);
+  void addRigidBody(const RigidBody &rigidBody);
+  RigidBody &addMesh(const tinygltf::Model &model, const float &mass,
+                     const glm::vec3 &initialPosition = glm::vec3(0.0f),
+                     const glm::quat &initialOrientation = glm::quat(0.0f, 0.0f,
+                                                                     0.0f,
+                                                                     1.0f),
+                     const glm::vec3 &initialVelocity = glm::vec3(0.0f),
+                     const glm::vec3 &initialAngularVelocity = glm::vec3(0.0f));
 
   static constexpr float c_gravity = 9.8f;
 
 private:
-  std::vector<RigidBody *> m_rigidBodies;
+  std::vector<RigidBody> m_rigidBodies;
 };
 glm::mat3 star(const glm::vec3 &a);
 } // namespace Physics

@@ -35,11 +35,15 @@ std::vector<IndexDataSpan> getIndexSpans(const tinygltf::Model &model);
 glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
                                     const IndexDataSpan &dataSpan,
                                     const bool &verbose);
+
+glm::mat4 getInertiaTensor(const std::span<glm::vec3> &vertices,
+                                    const IndexDataSpan &dataSpan,
+                                     const bool &verbose);
 template <typename T>
-constexpr glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
+glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
                                     const std::span<T> &indices,
                                     const bool &verbose);
 template <typename T>
-constexpr glm::mat4 getInertiaTensor(const std::span<glm::vec3> &vertices,
+glm::mat4 getInertiaTensor(const std::span<glm::vec3> &vertices,
                                      const std::span<T> &indices,
                                      const bool &verbose);

@@ -17,28 +17,18 @@ int main(int argc, char **argv) {
     /*                 "KayKit_DungeonRemastered_1.1_FREE/Assets/"*/
     /*                 "gltf/table_small.gltf");*/
 
-    const tinygltf::Model model =
+    const tinygltf::Model modelCoin =
         loadGltfFile("/home/manuel/3d-assets/KayKit_DungeonRemastered_1.1_FREE/"
                      "Assets/gltf/coin.gltf");
-    RenderObject coin = app.loadModel(model);
-    RenderObject cube = app.loadModel(model);
-
-    std::vector<std::span<glm::vec3>> coinVertices =
-        getVerticeData(model, "POSITION");
-    const IndexDataSpan &indexSpan = getIndexSpans(model).at(0);
-    const std::span<glm::vec3> &verticeSpan{coinVertices.at(0)};
-    glm::vec3 centerOfMass{getCenterOfMass(verticeSpan, indexSpan, false)};
+    RenderObject coin = app.loadModel(modelCoin);
 
     Physics::RigidBodySystem system;
-    Physics::RigidBody coinBody(
-        1.0f, glm::mat3(1.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::mat3(1.0f),
-        glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f, 3.0f, 0.0f),
-        coinVertices.at(0));
-    system.addRigidBody(&coinBody);
+    Physics::RigidBody& coinBody = system.addMesh(modelCoin, 1.0f);
 
     auto startTime = std::chrono::system_clock::now();
     auto currentTime = std::chrono::system_clock::now();
     std::chrono::duration deltaTime = currentTime - startTime;
+
     while (!app.shouldExit()) {
 
       currentTime = std::chrono::system_clock::now();

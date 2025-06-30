@@ -2,7 +2,7 @@
 #include "glm/common.hpp"
 #include "glm/geometric.hpp"
 #include "glm/gtc/quaternion.hpp"
-#include <iostream>
+#include "utils.h"
 #include <stdexcept>
 #include <sys/wait.h>
 namespace Physics {
@@ -113,18 +113,16 @@ RigidBody::RigidBody(const float &mass, const glm::mat3 &Ibody,
       m_angularMomentum(Ibody * initialAngularVelocity)
 
 {}
-RigidBody::RigidBody(const float &mass, const glm::mat3 &Ibody,
-                     const glm::vec3 &initialPosition,
+RigidBody::RigidBody(const tinygltf::Model &model, const float &mass,
+                     const glm::mat3 &Ibody, const glm::vec3 &initialPosition,
                      const glm::quat &initialOrientation,
                      const glm::vec3 &initialVelocity,
-                     const glm::vec3 &initialAngularVelocity,
-                     const std::span<glm::vec3> &vertices)
+                     const glm::vec3 &initialAngularVelocity)
     : m_mass(mass), m_Ibody(Ibody), m_IbodyInv(glm::inverse(Ibody)),
       m_position(initialPosition), m_orientation(initialOrientation),
       m_linearMomentum(initialVelocity * m_mass),
-      m_angularMomentum(Ibody * initialAngularVelocity),m_vertices(vertices)
+      m_angularMomentum(Ibody * initialAngularVelocity) {}
 
-{}
 const State Physics::RigidBody::getDerivative(const glm::vec3 &forces,
                                               const glm::vec3 &torques) const {
   State derivativeState = {};
@@ -174,18 +172,40 @@ glm::vec3 RigidBody::getAngularVelocity() const {
 }
 void RigidBodySystem::eulerStep(const float &delta) {
 
-  for (RigidBody *rigidBody : m_rigidBodies) {
-    rigidBody->addForcesAndTorques(glm::vec3(0.0f, 0.0f, 0.0f),
-                                   glm::vec3(0.0f));
-    rigidBody->eulerStep(delta);
-    rigidBody->clearForcesAndTorques();
+  for (RigidBody &rigidBody : m_rigidBodies) {
+    rigidBody.addForcesAndTorques(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f));
+    rigidBody.eulerStep(delta);
+    rigidBody.clearForcesAndTorques();
   }
 }
-void RigidBodySystem::addRigidBody(RigidBody *rigidBody) {
+void RigidBodySystem::addRigidBody(const RigidBody &rigidBody) {
   m_rigidBodies.push_back(rigidBody);
 }
 glm::mat3 star(const glm::vec3 &a) {
   return glm::mat3(glm::vec3(0.0f, -a.z, a.y), glm::vec3(a.z, 0.0f, -a.x),
                    glm::vec3(-a.y, a.x, 0.0f));
+}
+
+RigidBody &RigidBodySystem::addMesh(const tinygltf::Model &model,
+                                    const float &mass,
+                                    const glm::vec3 &initialPosition,
+                                    const glm::quat &initialOrientation,
+                                    const glm::vec3 &initialVelocity,
+                                    const glm::vec3 &initialAngularVelocity) {
+
+  std::vector<std::span<glm::vec3>> verticesSpan =
+      getVerticeData(model, "POSITION");
+
+  IndexDataSpan indexSpan = getIndexSpans(model).at(0);
+  glm::vec3 centerOfMass =
+      getCenterOfMass(verticesSpan.at(0), indexSpan, false);
+  glm::mat3 inertialTensor =
+      getInertiaTensor(verticesSpan.at(0), indexSpan, false);
+
+  m_rigidBodies.push_back(
+      RigidBody(mass, inertialTensor, initialPosition - centerOfMass,
+                initialOrientation, initialVelocity, initialAngularVelocity));
+
+  return m_rigidBodies.back();
 }
 } // namespace Physics

@@ -126,9 +126,9 @@ void Renderer::initVulkan() {
   createSurface();
   pickPhysicalDevice();
   createLogicalDevice();
-  createSyncObjects();
   createVMA();
   createSwapChain();
+  createSyncObjects();
   createImageViews();
   createRenderPass();
   createDepthResources();
@@ -400,7 +400,7 @@ void Renderer::createSwapChain() {
 
   VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
-  uint32_t m_imageCount = swapChainSupport.capabilities.minImageCount + 1;
+  m_imageCount = swapChainSupport.capabilities.minImageCount + 1;
 
   if (swapChainSupport.capabilities.maxImageCount != 0) {
     if (swapChainSupport.capabilities.minImageCount > 0 &&
@@ -2181,8 +2181,7 @@ void Renderer::resizeDescriptorSets() {
       glm::radians(45.0f),
       swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
   ubo.projection[1][1] *= -1.0f;
-  for (uint32_t currentImage = 0; currentImage < m_imageCount;
-       currentImage++) {
+  for (uint32_t currentImage = 0; currentImage < m_imageCount; currentImage++) {
     memcpy(m_uniformBufferMapped[currentImage], &ubo, sizeof(ubo));
   }
 }
@@ -2230,8 +2229,7 @@ void Renderer::createDescriptorPool() {
   poolSizes[0].descriptorCount = static_cast<uint32_t>(m_imageCount);
 
   poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  poolSizes[1].descriptorCount =
-      static_cast<uint32_t>(m_imageCount) * 100;
+  poolSizes[1].descriptorCount = static_cast<uint32_t>(m_imageCount) * 100;
 
   VkDescriptorPoolCreateInfo descriptorPoolCreateInfo{};
   descriptorPoolCreateInfo.sType =
@@ -2239,8 +2237,7 @@ void Renderer::createDescriptorPool() {
   descriptorPoolCreateInfo.poolSizeCount =
       static_cast<uint32_t>(poolSizes.size());
   descriptorPoolCreateInfo.pPoolSizes = poolSizes.data();
-  descriptorPoolCreateInfo.maxSets =
-      static_cast<uint32_t>(m_imageCount) * 90;
+  descriptorPoolCreateInfo.maxSets = static_cast<uint32_t>(m_imageCount) * 90;
 
   if (vkCreateDescriptorPool(m_device, &descriptorPoolCreateInfo, nullptr,
                              &m_firstDescriptorPool) != VK_SUCCESS) {
@@ -2515,8 +2512,8 @@ glm::mat4 RenderObject::getInertiaTensor(const bool &verbose) const {
 
       std::cout << jacobian[2][0] << "\t" << jacobian[2][1] << "\t"
                 << jacobian[2][2] << "\t" << std::endl;
+      std::cout << "Determinant of the jacobian : " << det << std::endl;
     }
-    std::cout << "Determinant of the jacobian : " << det << std::endl;
 
     float abcx = vertex1.x * vertex1.x + vertex1.x * vertex2.x +
                  vertex2.x * vertex2.x + vertex1.x * vertex3.x +
@@ -2588,7 +2585,7 @@ glm::mat4 RenderObject::getInertiaTensor(const bool &verbose) const {
     }
     acumulatedInertialTensor += tetrahedronInertiaTensor;
     numsOfTetrahedrons++;
+    std::cout << "Number of tetrahedrons: " << numsOfTetrahedrons << std::endl;
   }
-  std::cout << "Number of tetrahedrons: " << numsOfTetrahedrons << std::endl;
   return acumulatedInertialTensor / static_cast<float>(numsOfTetrahedrons);
 }

@@ -68,7 +68,7 @@ getVerticeData(const tinygltf::Model &model, const std::string &attributeName) {
 
   for (const tinygltf::Node &node : model.nodes) {
     tinygltf::Mesh mesh = model.meshes[node.mesh];
-    assert(mesh.primitives.size() > 1);
+    assert(mesh.primitives.size() < 2);
     assert(mesh.primitives[0].attributes.count(attributeName));
     if (mesh.primitives.size() > 0) {
 
@@ -101,7 +101,7 @@ getVerticeData(const tinygltf::Model &model, const std::string &attributeName) {
       const size_t numberOfVertices =
           bufferView.byteLength / componentBytes / numberOfComponents;
       glm::vec3 *vec3ptr = reinterpret_cast<glm::vec3 *>(buffer.data.data());
-      std::span<glm::vec3> vecBufferSpan(vec3ptr, numberOfVertices);
+      std::span<glm::vec3> vecBufferSpan(vec3ptr, vec3ptr + numberOfVertices);
       bufferSpans.push_back(vecBufferSpan);
     }
   }
@@ -145,7 +145,7 @@ std::vector<IndexDataSpan> getIndexSpans(const tinygltf::Model &model) {
 
   for (const tinygltf::Node &node : model.nodes) {
     tinygltf::Mesh mesh = model.meshes[node.mesh];
-    assert(mesh.primitives.size() > 1);
+    assert(mesh.primitives.size() < 2);
     if (mesh.primitives.size() > 0) {
 
       const int accesorIndex{mesh.primitives[0].indices};
@@ -168,8 +168,7 @@ std::vector<IndexDataSpan> getIndexSpans(const tinygltf::Model &model) {
 }
 
 glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
-                                    const IndexDataSpan &dataSpan,
-                                    const bool &verbose) {
+                          const IndexDataSpan &dataSpan, const bool &verbose) {
 
   switch (dataSpan.getBytesPerInt()) {
   case 1: {
@@ -178,8 +177,8 @@ glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
   case 2: {
     uint16_t *intPtr =
         reinterpret_cast<uint16_t *>(dataSpan.getIndexSpan().data());
-    size_t numberOfIndices{dataSpan.getIndexSpan().size() /
-                           dataSpan.getBytesPerInt()};
+    size_t numberOfIndices =
+        dataSpan.getIndexSpan().size() / dataSpan.getBytesPerInt();
     std::span<uint16_t> span16(intPtr, intPtr + numberOfIndices);
     return getCenterOfMass<uint16_t>(vertices, span16, verbose);
     break;
@@ -187,24 +186,29 @@ glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
   case 3: {
     uint32_t *intPtr =
         reinterpret_cast<uint32_t *>(dataSpan.getIndexSpan().data());
-    auto numberOfIndices{dataSpan.getIndexSpan().size() /
-                         dataSpan.getBytesPerInt()};
-    std::span<uint32_t> span16(intPtr, intPtr + numberOfIndices);
-    return getCenterOfMass<uint32_t>(vertices, span16, verbose);
+    auto numberOfIndices =
+        dataSpan.getIndexSpan().size() / dataSpan.getBytesPerInt();
+    std::span<uint32_t> span32(intPtr, intPtr + numberOfIndices);
+    return getCenterOfMass<uint32_t>(vertices, span32, verbose);
   } break;
   default:
     assert(false);
   }
 }
 
-template <typename T>
-constexpr glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
-                                    const std::span<T> &indices,
-                                    const bool &verbose) {
+glm::mat4 getInertiaTensor(const std::span<glm::vec3> &vertices,
+                           const IndexDataSpan &dataSpan, const bool &verbose) {
 
-  unsigned int numOfVertices{0};
-  glm::vec3 centerOfMass{0.0f};
-  float totalArea{0.0f};
+  return getInertiaTensor(vertices, dataSpan.getIndexSpan(), verbose);
+}
+
+template <typename T>
+glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
+                          const std::span<T> &indices, const bool &verbose) {
+
+  unsigned int numOfVertices = indices.size();
+  glm::vec3 centerOfMass = glm::vec3(0.0f);
+  float totalArea = 0.0f;
 
   if (verbose) {
     std::cout << "numOfTriangles: " << numOfVertices << std::endl;
@@ -218,20 +222,20 @@ constexpr glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
       std::cout << indices[vertexIndex + 2] << std::endl;
     }
 
-    glm::vec3 vertex1{vertices[indices[vertexIndex]]};
+    glm::vec3 vertex1 = vertices[indices[vertexIndex]];
     if (verbose) {
       std::cout << "vec1" << std::endl;
 
       std::cout << vertex1.x << " " << vertex1.y << " " << vertex1.z
                 << std::endl;
     }
-    glm::vec3 vertex2{vertices[indices[vertexIndex + 1]]};
+    glm::vec3 vertex2 = vertices[indices[vertexIndex + 1]];
     if (verbose) {
       std::cout << "vec2" << std::endl;
       std::cout << vertex2.x << " " << vertex2.y << " " << vertex2.z
                 << std::endl;
     }
-    glm::vec3 vertex3{vertices[indices[vertexIndex + 2]]};
+    glm::vec3 vertex3 = vertices[indices[vertexIndex + 2]];
     if (verbose) {
       std::cout << "vec3" << std::endl;
       std::cout << vertex3.x << " " << vertex3.y << " " << vertex3.z
@@ -248,7 +252,7 @@ constexpr glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
     glm::vec3 a{vertex2 - vertex1};
     glm::vec3 b{vertex3 - vertex1};
     glm::vec3 crossVector{glm::cross(a, b)};
-    float area{crossVector.length() / 2.0f};
+    float area = crossVector.length() / 2.0f;
     totalArea += area;
     centerOfMass += triangleCentroid * area;
     if (verbose) {
@@ -260,9 +264,8 @@ constexpr glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
   return centerOfMass / totalArea;
 }
 template <typename T>
-constexpr glm::mat4 getInertiaTensor(const std::span<glm::vec3> &vertices,
-                                     const std::span<T> &indices,
-                                     const bool &verbose) {
+glm::mat4 getInertiaTensor(const std::span<glm::vec3> &vertices,
+                           const std::span<T> &indices, const bool &verbose) {
 
   glm::mat3 acumulatedInertialTensor = glm::mat3(0.0f);
 
@@ -297,8 +300,8 @@ constexpr glm::mat4 getInertiaTensor(const std::span<glm::vec3> &vertices,
 
       std::cout << jacobian[2][0] << "\t" << jacobian[2][1] << "\t"
                 << jacobian[2][2] << "\t" << std::endl;
+      std::cout << "Determinant of the jacobian : " << det << std::endl;
     }
-    std::cout << "Determinant of the jacobian : " << det << std::endl;
 
     float abcx = vertex1.x * vertex1.x + vertex1.x * vertex2.x +
                  vertex2.x * vertex2.x + vertex1.x * vertex3.x +
@@ -370,7 +373,9 @@ constexpr glm::mat4 getInertiaTensor(const std::span<glm::vec3> &vertices,
     }
     acumulatedInertialTensor += tetrahedronInertiaTensor;
     numsOfTetrahedrons++;
+    if (verbose)
+      std::cout << "Number of tetrahedrons: " << numsOfTetrahedrons
+                << std::endl;
   }
-  std::cout << "Number of tetrahedrons: " << numsOfTetrahedrons << std::endl;
   return acumulatedInertialTensor / static_cast<float>(numsOfTetrahedrons);
 }
