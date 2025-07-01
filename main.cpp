@@ -14,12 +14,10 @@ int main(int argc, char **argv) {
     Renderer app;
     /*RenderObject table =*/
     /*    app.loadGLTF("/home/manuel/Documents/assets/"*/
-    /*                 "KayKit_DungeonRemastered_1.1_FREE/Assets/"*/
-    /*                 "gltf/table_small.gltf");*/
+    /*                 "KayKit_DungeonRemastered_1.1_FREE/Assets/"*/ /*                 "gltf/table_small.gltf");*/
 
-    const tinygltf::Model modelCoin =
-        loadGltfFile("/home/manuel/3d-assets/KayKit_DungeonRemastered_1.1_FREE/"
-                     "Assets/gltf/coin.gltf");
+    const tinygltf::Model &modelCoin =
+        loadGltfFile("/home/manuel/3d-assets/test_assets/cube.gltf");
     RenderObject coin = app.loadModel(modelCoin);
 
     Physics::RigidBodySystem system;

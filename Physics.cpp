@@ -193,14 +193,13 @@ RigidBody &RigidBodySystem::addMesh(const tinygltf::Model &model,
                                     const glm::vec3 &initialVelocity,
                                     const glm::vec3 &initialAngularVelocity) {
 
-  std::vector<std::span<glm::vec3>> verticesSpan =
-      getVerticeData(model, "POSITION");
+  const std::span<const glm::vec3> verticesSpan =
+      getVertexData(model, "POSITION");
 
-  IndexDataSpan indexSpan = getIndexSpans(model).at(0);
-  glm::vec3 centerOfMass =
-      getCenterOfMass(verticesSpan.at(0), indexSpan, false);
-  glm::mat3 inertialTensor =
-      getInertiaTensor(verticesSpan.at(0), indexSpan, false);
+  const IndexDataSpan indexSpan = getIndexSpans(model).at(0);
+
+  const glm::vec3 &centerOfMass = getCenterOfMass(verticesSpan, indexSpan, false);
+  const glm::mat3 &inertialTensor = getInertiaTensor(verticesSpan, indexSpan, false);
 
   m_rigidBodies.push_back(
       RigidBody(mass, inertialTensor, initialPosition - centerOfMass,

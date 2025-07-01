@@ -62,58 +62,55 @@ tinygltf::Model loadGltfFile(const std::string &path) {
   return model;
 }
 
-std::vector<std::span<glm::vec3>>
-getVerticeData(const tinygltf::Model &model, const std::string &attributeName) {
-  std::vector<std::span<glm::vec3>> bufferSpans;
+const std::span<const glm::vec3>
+getVertexData(const tinygltf::Model &model, const std::string &attributeName) {
 
-  for (const tinygltf::Node &node : model.nodes) {
-    tinygltf::Mesh mesh = model.meshes[node.mesh];
-    assert(mesh.primitives.size() < 2);
-    assert(mesh.primitives[0].attributes.count(attributeName));
-    if (mesh.primitives.size() > 0) {
+  const tinygltf::Mesh &mesh = model.meshes.at(0);
+  assert(mesh.primitives.size() < 2);
+  assert(mesh.primitives.size() > 0);
+  assert(mesh.primitives[0].attributes.count(attributeName));
 
-      const int primitiveIndex = mesh.primitives[0].attributes[attributeName];
-      tinygltf::Accessor accessor = model.accessors[primitiveIndex];
-      const int bufferViewIndex = accessor.bufferView;
-      tinygltf::BufferView bufferView = model.bufferViews[bufferViewIndex];
-      const int bufferIndex = bufferView.buffer;
-      tinygltf::Buffer buffer = model.buffers[bufferIndex];
-      assert(accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT);
-      const size_t componentBytes{4};
-      size_t numberOfComponents{0};
-      switch (accessor.type) {
-      case TINYGLTF_TYPE_SCALAR:
-        numberOfComponents = 1;
-        break;
-      case TINYGLTF_TYPE_VEC2:
-        numberOfComponents = 2;
-        break;
-      case TINYGLTF_TYPE_VEC3:
-        numberOfComponents = 3;
-        break;
-      case TINYGLTF_TYPE_VEC4:
-        numberOfComponents = 4;
-        break;
-      default:
-        std::cerr << "accessor type not supported" << std::endl;
-        assert(false);
-      }
-      const size_t numberOfVertices =
-          bufferView.byteLength / componentBytes / numberOfComponents;
-      glm::vec3 *vec3ptr = reinterpret_cast<glm::vec3 *>(buffer.data.data());
-      std::span<glm::vec3> vecBufferSpan(vec3ptr, vec3ptr + numberOfVertices);
-      bufferSpans.push_back(vecBufferSpan);
-    }
+  const std::span<const tinygltf::Primitive> primitiveSpan(mesh.primitives);
+  const int &primitiveIndex = primitiveSpan[0].attributes.at(attributeName);
+  const tinygltf::Accessor &accessor = model.accessors[primitiveIndex];
+  const int bufferViewIndex = accessor.bufferView;
+  const tinygltf::BufferView &bufferView = model.bufferViews[bufferViewIndex];
+  const int bufferIndex = bufferView.buffer;
+  const std::span<const tinygltf::Buffer> bufferSpans(model.buffers);
+  const std::span<const unsigned char> bufferSpan(
+      bufferSpans[bufferIndex].data.data(),
+      accessor.byteOffset + bufferView.byteOffset);
+  assert(accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT);
+  const size_t componentBytes = 4;
+  size_t numberOfComponents = 0;
+  switch (accessor.type) {
+  case TINYGLTF_TYPE_SCALAR:
+    numberOfComponents = 1;
+    break;
+  case TINYGLTF_TYPE_VEC2:
+    numberOfComponents = 2;
+    break;
+  case TINYGLTF_TYPE_VEC3:
+    numberOfComponents = 3;
+    break;
+  case TINYGLTF_TYPE_VEC4:
+    numberOfComponents = 4;
+    break;
+  default:
+    std::cerr << "accessor type not supported" << std::endl;
+    assert(false);
   }
-
-  return bufferSpans;
+  const size_t numberOfVertices =
+      bufferView.byteLength / componentBytes / numberOfComponents;
+  const glm::vec3 *vec3ptr =
+      reinterpret_cast<const glm::vec3 *>(bufferSpan.data());
+  return std::span<const glm::vec3>(vec3ptr, numberOfVertices);
 }
-constexpr IndexDataSpan::IndexDataSpan(const std::span<uint8_t> &indexSpan,
-                                       const uint8_t &bytesperInt)
-    : m_indexSpan{indexSpan}, m_bytesPerInt{bytesperInt} {}
+IndexDataSpan::IndexDataSpan(const std::span<const uint8_t> &indexSpan,
+                             const uint8_t &bytesperInt)
+    : m_indexSpan(indexSpan), m_bytesPerInt(bytesperInt) {}
 
-constexpr std::span<uint8_t> IndexDataSpan::getIndexSpan() const {
-
+const std::span<const uint8_t> IndexDataSpan::getIndexSpan() const {
   return m_indexSpan;
 }
 constexpr int getByteWidthFromComponentType(const int &componentType) {
@@ -136,30 +133,30 @@ constexpr int getByteWidthFromComponentType(const int &componentType) {
   }
   }
 }
-constexpr uint8_t IndexDataSpan::getBytesPerInt() const {
-  return m_bytesPerInt;
-}
+const uint8_t IndexDataSpan::getBytesPerInt() const { return m_bytesPerInt; }
 std::vector<IndexDataSpan> getIndexSpans(const tinygltf::Model &model) {
 
   std::vector<IndexDataSpan> bufferSpans;
 
   for (const tinygltf::Node &node : model.nodes) {
-    tinygltf::Mesh mesh = model.meshes[node.mesh];
+    const tinygltf::Mesh &mesh = model.meshes[node.mesh];
     assert(mesh.primitives.size() < 2);
     if (mesh.primitives.size() > 0) {
 
-      const int accesorIndex{mesh.primitives[0].indices};
-      tinygltf::Accessor accessor = model.accessors[accesorIndex];
-      const int bufferViewIndex{accessor.bufferView};
-      tinygltf::BufferView bufferView = model.bufferViews[bufferViewIndex];
-      const int bufferIndex = bufferView.buffer;
-      tinygltf::Buffer buffer{model.buffers[bufferIndex]};
+      const int &accesorIndex = mesh.primitives[0].indices;
+      const tinygltf::Accessor &accessor = model.accessors[accesorIndex];
+      const int &bufferViewIndex = accessor.bufferView;
+      const tinygltf::BufferView &bufferView =
+          model.bufferViews[bufferViewIndex];
+      const int &bufferIndex = bufferView.buffer;
+      const tinygltf::Buffer &buffer = model.buffers[bufferIndex];
 
-      int componentBytes{getByteWidthFromComponentType(accessor.componentType)};
+      const uint8_t *intPtr = reinterpret_cast<const uint8_t *>(
+          buffer.data.data() + bufferView.byteOffset + accessor.byteOffset);
+      std::span<const uint8_t> bufferSpan(intPtr, bufferView.byteLength);
 
-      uint8_t *intPtr = reinterpret_cast<uint8_t *>(buffer.data.data());
-      std::span<uint8_t> bufferSpan(intPtr, intPtr + bufferView.byteLength);
-      bufferSpans.push_back(IndexDataSpan(bufferSpan, componentBytes));
+      bufferSpans.push_back(IndexDataSpan(
+          bufferSpan, getByteWidthFromComponentType(accessor.componentType)));
       assert(accessor.type == TINYGLTF_TYPE_SCALAR);
     }
   }
@@ -167,44 +164,72 @@ std::vector<IndexDataSpan> getIndexSpans(const tinygltf::Model &model) {
   return bufferSpans;
 }
 
-glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
-                          const IndexDataSpan &dataSpan, const bool &verbose) {
+const glm::vec3 getCenterOfMass(const std::span<const glm::vec3> &vertices,
+                                const IndexDataSpan &dataSpan,
+                                const bool &verbose) {
 
   switch (dataSpan.getBytesPerInt()) {
   case 1: {
-    return getCenterOfMass<uint8_t>(vertices, dataSpan.getIndexSpan(), verbose);
+    return getCenterOfMass<const uint8_t>(vertices, dataSpan.getIndexSpan(),
+                                          verbose);
   } break;
   case 2: {
-    uint16_t *intPtr =
-        reinterpret_cast<uint16_t *>(dataSpan.getIndexSpan().data());
+    const uint16_t *intPtr =
+        reinterpret_cast<const uint16_t *>(dataSpan.getIndexSpan().data());
     size_t numberOfIndices =
         dataSpan.getIndexSpan().size() / dataSpan.getBytesPerInt();
-    std::span<uint16_t> span16(intPtr, intPtr + numberOfIndices);
-    return getCenterOfMass<uint16_t>(vertices, span16, verbose);
+    std::span<const uint16_t> span16(intPtr, numberOfIndices);
+    return getCenterOfMass<const uint16_t>(vertices, span16, verbose);
     break;
   }
-  case 3: {
-    uint32_t *intPtr =
-        reinterpret_cast<uint32_t *>(dataSpan.getIndexSpan().data());
+  case 4: {
+    const uint32_t *intPtr =
+        reinterpret_cast<const uint32_t *>(dataSpan.getIndexSpan().data());
     auto numberOfIndices =
         dataSpan.getIndexSpan().size() / dataSpan.getBytesPerInt();
-    std::span<uint32_t> span32(intPtr, intPtr + numberOfIndices);
-    return getCenterOfMass<uint32_t>(vertices, span32, verbose);
+    std::span<const uint32_t> span32(intPtr, numberOfIndices);
+    return getCenterOfMass<const uint32_t>(vertices, span32, verbose);
   } break;
   default:
     assert(false);
   }
 }
 
-glm::mat4 getInertiaTensor(const std::span<glm::vec3> &vertices,
-                           const IndexDataSpan &dataSpan, const bool &verbose) {
+const glm::mat3 getInertiaTensor(const std::span<const glm::vec3> &vertices,
+                                 const IndexDataSpan &dataSpan,
+                                 const bool &verbose) {
 
-  return getInertiaTensor(vertices, dataSpan.getIndexSpan(), verbose);
+  switch (dataSpan.getBytesPerInt()) {
+  case 1: {
+    return getInertiaTensor<const uint8_t>(vertices, dataSpan.getIndexSpan(),
+                                           verbose);
+  } break;
+  case 2: {
+    const uint16_t *intPtr =
+        reinterpret_cast<const uint16_t *>(dataSpan.getIndexSpan().data());
+    size_t numberOfIndices =
+        dataSpan.getIndexSpan().size() / dataSpan.getBytesPerInt();
+    std::span<const uint16_t> span16(intPtr, numberOfIndices);
+    return getInertiaTensor<const uint16_t>(vertices, span16, verbose);
+    break;
+  }
+  case 3: {
+    const uint32_t *intPtr =
+        reinterpret_cast<const uint32_t *>(dataSpan.getIndexSpan().data());
+    auto numberOfIndices =
+        dataSpan.getIndexSpan().size() / dataSpan.getBytesPerInt();
+    std::span<const uint32_t> span32(intPtr, intPtr + numberOfIndices);
+    return getInertiaTensor<const uint32_t>(vertices, span32, verbose);
+  } break;
+  default:
+    assert(false);
+  }
 }
 
 template <typename T>
-glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
-                          const std::span<T> &indices, const bool &verbose) {
+const glm::vec3 getCenterOfMass(const std::span<const glm::vec3> &vertices,
+                                const std::span<T> &indices,
+                                const bool &verbose) {
 
   unsigned int numOfVertices = indices.size();
   glm::vec3 centerOfMass = glm::vec3(0.0f);
@@ -222,27 +247,27 @@ glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
       std::cout << indices[vertexIndex + 2] << std::endl;
     }
 
-    glm::vec3 vertex1 = vertices[indices[vertexIndex]];
+    const glm::vec3 &vertex1 = vertices[indices[vertexIndex]];
     if (verbose) {
       std::cout << "vec1" << std::endl;
 
       std::cout << vertex1.x << " " << vertex1.y << " " << vertex1.z
                 << std::endl;
     }
-    glm::vec3 vertex2 = vertices[indices[vertexIndex + 1]];
+    const glm::vec3 &vertex2 = vertices[indices[vertexIndex + 1]];
     if (verbose) {
       std::cout << "vec2" << std::endl;
       std::cout << vertex2.x << " " << vertex2.y << " " << vertex2.z
                 << std::endl;
     }
-    glm::vec3 vertex3 = vertices[indices[vertexIndex + 2]];
+    const glm::vec3 &vertex3 = vertices[indices[vertexIndex + 2]];
     if (verbose) {
       std::cout << "vec3" << std::endl;
       std::cout << vertex3.x << " " << vertex3.y << " " << vertex3.z
                 << std::endl;
     }
 
-    glm::vec3 triangleCentroid = (vertex1 + vertex2 + vertex3) / 3.0f;
+    const glm::vec3 triangleCentroid = (vertex1 + vertex2 + vertex3) / 3.0f;
 
     if (verbose) {
       std::cout << "centroid" << std::endl;
@@ -263,9 +288,11 @@ glm::vec3 getCenterOfMass(const std::span<glm::vec3> &vertices,
   }
   return centerOfMass / totalArea;
 }
+
 template <typename T>
-glm::mat4 getInertiaTensor(const std::span<glm::vec3> &vertices,
-                           const std::span<T> &indices, const bool &verbose) {
+const glm::mat3 getInertiaTensor(const std::span<const glm::vec3> &vertices,
+                                 const std::span<T> &indices,
+                                 const bool &verbose) {
 
   glm::mat3 acumulatedInertialTensor = glm::mat3(0.0f);
 
@@ -273,9 +300,9 @@ glm::mat4 getInertiaTensor(const std::span<glm::vec3> &vertices,
   for (size_t vertexIndex = 0; vertexIndex < indices.size(); vertexIndex += 3) {
 
     glm::vec3 vertex1 = glm::vec3(0.0f);
-    glm::vec3 vertex2 = vertices[indices[vertexIndex] * 3];
-    glm::vec3 vertex3 = vertices[indices[vertexIndex + 1] * 3];
-    glm::vec3 vertex4 = vertices[indices[vertexIndex + 2] * 3];
+    glm::vec3 vertex2 = vertices[indices[vertexIndex]];
+    glm::vec3 vertex3 = vertices[indices[vertexIndex + 1]];
+    glm::vec3 vertex4 = vertices[indices[vertexIndex + 2]];
 
     glm::mat3 jacobian = glm::mat3(vertex2, vertex3, vertex4);
     float det = glm::determinant(jacobian);
