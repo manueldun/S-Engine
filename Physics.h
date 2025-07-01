@@ -77,13 +77,13 @@ public:
             const glm::quat &initialOrientation,
             const glm::vec3 &initialVelocity,
             const glm::vec3 &initialAngularVelocity);
-  RigidBody(const tinygltf::Model &model, const float &mass,
-            const glm::mat3 &Ibody = glm::mat3(0.0f),
-            const glm::vec3 &initialPosition = glm::vec3(0.0f),
-            const glm::quat &initialOrientation = glm::quat(0.0f, 0.0f, 0.0f,
-                                                            1.0f),
-            const glm::vec3 &initialVelocity = glm::vec3(0.0f),
-            const glm::vec3 &initialAngularVelocity = glm::vec3(0.0f));
+  RigidBody(
+      const std::span<const glm::vec3> &vertices, const float &mass,
+      const glm::mat3 &Ibody = glm::mat3(0.0f),
+      const glm::vec3 &initialPosition = glm::vec3(0.0f),
+      const glm::quat &initialOrientation = glm::quat(0.0f, 0.0f, 0.0f, 1.0f),
+      const glm::vec3 &initialVelocity = glm::vec3(0.0f),
+      const glm::vec3 &initialAngularVelocity = glm::vec3(0.0f));
   const State getDerivative(const glm::vec3 &forces,
                             const glm::vec3 &torques) const;
   void eulerStep(const float &delta);
@@ -94,6 +94,7 @@ public:
   bool doesIntersect(const RigidBody &rigidBody) const;
 
 private:
+  const std::span<const glm::vec3> m_vertices;
   const float m_mass;
   const glm::mat3 m_Ibody;
   const glm::mat3 m_IbodyInv;
@@ -113,7 +114,6 @@ private:
 
   float m_time = 0.0f;
 
-  std::span<glm::vec3> m_vertices;
 };
 class RigidBodySystem {
 public:
