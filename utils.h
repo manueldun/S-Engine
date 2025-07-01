@@ -11,8 +11,8 @@
 
 std::vector<char> readFile(const std::string &filename);
 
-constexpr bool isTowardsPlaneNormal(std::array<glm::vec3, 3> triangleplane,
-                                    glm::vec3);
+bool isTowardsPlaneNormal(const std::span<const glm::vec3, 3> &trianglePlane,
+                          const glm::vec3 &point);
 
 tinygltf::Model loadGltfFile(const std::string &path);
 
@@ -48,3 +48,6 @@ template <typename T>
 const glm::mat3 getInertiaTensor(const std::span<const glm::vec3> &vertices,
                                  const std::span<T> &indices,
                                  const bool &verbose);
+
+const bool doCollide(const std::span<const glm::vec3> vertices1,
+                     const std::span<const glm::vec3> vertices2);

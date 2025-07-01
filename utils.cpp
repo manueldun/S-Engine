@@ -30,13 +30,13 @@ std::vector<char> readFile(const std::string &filename) {
 /* Determines if the normal of a triangle points towards a point following the
  * right hand ordering to determinate the triangle normal direction
  */
-constexpr bool isTowardsPlaneNormal(std::array<glm::vec3, 3> trianglePlane,
-                                    glm::vec3 point) {
+bool isTowardsPlaneNormal(const std::span<const glm::vec3> &trianglePlane,
+                          const glm::vec3 &point) {
 
-  glm::vec3 triangleEdge1{trianglePlane[1] - trianglePlane[0]};
-  glm::vec3 triangleEdge2{trianglePlane[2] - trianglePlane[0]};
-  glm::vec3 normal{glm::cross(triangleEdge1, triangleEdge2)};
-  float dotProduct{glm::dot(normal, point)};
+  const glm::vec3 triangleEdge1 = trianglePlane[1] - trianglePlane[0];
+  const glm::vec3 triangleEdge2 = trianglePlane[2] - trianglePlane[0];
+  const glm::vec3 normal = glm::cross(triangleEdge1, triangleEdge2);
+  const float dotProduct = glm::dot(normal, point);
   return dotProduct > 0.0f;
 }
 
@@ -405,4 +405,27 @@ const glm::mat3 getInertiaTensor(const std::span<const glm::vec3> &vertices,
                 << std::endl;
   }
   return acumulatedInertialTensor / static_cast<float>(numsOfTetrahedrons);
+}
+const bool doCollide(const std::span<const glm::vec3> vertices1,
+                     const std::span<const glm::vec3> vertices2) {
+  for (size_t i = 0; i < vertices1.size() - 3; i++) {
+    const std::span<const glm::vec3> vertexPlane = vertices1.subspan(i, 3);
+    bool allOnOneSide = true;
+    bool isTowards1 = isTowardsPlaneNormal(vertexPlane, vertices1[0]);
+    for (const glm::vec3 &vertex : vertices1.subspan(1)) {
+      if (isTowards1 != isTowardsPlaneNormal(vertexPlane, vertex)) {
+        allOnOneSide = false;
+      }
+    }
+    if (allOnOneSide) {
+      allOnOneSide = true;
+      bool isTowards2 = !isTowards1;
+      for (const glm::vec3 &vertex : vertices2) {
+        if (isTowards2 != isTowardsPlaneNormal(vertexPlane, vertex)) {
+          return false;
+        }
+      }
+    }
+  }
+  return true;
 }
