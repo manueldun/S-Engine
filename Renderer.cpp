@@ -1247,7 +1247,7 @@ void Renderer::drawFrame() {
   vkWaitForFences(m_device, 1, &m_inFlightFences[m_currentFrame], VK_TRUE,
                   UINT64_MAX);
 
-  uint32_t currentSwapChainImageIndex;
+  uint32_t currentSwapChainImageIndex = 0;
   VkResult result =
       vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX,
                             m_imageAvailableSemaphores[m_currentFrame],
@@ -1264,7 +1264,6 @@ void Renderer::drawFrame() {
   vkResetFences(m_device, 1, &m_inFlightFences[m_currentFrame]);
   vkResetCommandBuffer(m_commandBuffers[m_currentFrame], 0);
 
-  uint32_t imageIndex = currentSwapChainImageIndex;
   VkCommandBuffer commandBuffer = m_commandBuffers[m_currentFrame];
   VkCommandBufferBeginInfo commandBufferBeginInfo{};
   commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1278,7 +1277,8 @@ void Renderer::drawFrame() {
   VkRenderPassBeginInfo renderPassBeginInfo{};
   renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   renderPassBeginInfo.renderPass = m_renderPass;
-  renderPassBeginInfo.framebuffer = m_swapChainFramebuffers[imageIndex];
+  renderPassBeginInfo.framebuffer =
+      m_swapChainFramebuffers[currentSwapChainImageIndex];
   renderPassBeginInfo.renderArea.offset = {0, 0};
   renderPassBeginInfo.renderArea.extent = swapChainExtent;
 
@@ -1290,11 +1290,31 @@ void Renderer::drawFrame() {
   renderPassBeginInfo.clearValueCount =
       static_cast<uint32_t>(clearValues.size());
 
+  VkPipelineStageFlags srcPipelineStageflags =
+      VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+  VkPipelineStageFlags dstPipelineStageflags =
+      VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+  VkDependencyFlags dependencyFlags = 0;
+  uint32_t memoryBarrierCount = 1;
+  VkMemoryBarrier memoryBarrier{};
+  memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+  memoryBarrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+  memoryBarrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+  uint32_t bufferMemoryBarrierCount = 0;
+  VkBufferMemoryBarrier bufferMemoryBarrier{};
+  uint32_t imageMemoryBarrierCount = 0;
+  VkImageMemoryBarrier imageMemoryBarrier;
+  vkCmdPipelineBarrier(commandBuffer, srcPipelineStageflags,
+                       dstPipelineStageflags, dependencyFlags,
+                       memoryBarrierCount, &memoryBarrier,
+                       bufferMemoryBarrierCount, &bufferMemoryBarrier,
+                       imageMemoryBarrierCount, &imageMemoryBarrier);
   vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo,
                        VK_SUBPASS_CONTENTS_INLINE);
 
   for (size_t drawbleIndex = 0; drawbleIndex < m_pNodeToDraw.size();
        drawbleIndex++) {
+
     vkCmdBindPipeline(
         commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
         m_pNodeToDraw.at(drawbleIndex)->m_drawbles.at(0).m_pipeline);
@@ -1358,6 +1378,12 @@ void Renderer::drawFrame() {
         commandBuffer,
         m_pNodeToDraw.at(drawbleIndex)->m_drawbles.at(drawbleIndex).m_count, 1,
         0, 0, 0);
+
+    // vkCmdPipelineBarrier(commandBuffer, srcPipelineStageflags,
+    //                      dstPipelineStageflags, dependencyFlags,
+    //                      memoryBarrierCount, &memoryBarrier,
+    //                      bufferMemoryBarrierCount, &bufferMemoryBarrier,
+    //                      imageMemoryBarrierCount, &imageMemoryBarrier);
   }
 
   ImGui_ImplVulkan_NewFrame();
@@ -1418,80 +1444,6 @@ void Renderer::drawFrame() {
   m_currentFrame = (m_currentFrame + 1) % m_imageCount;
 }
 
-void Renderer::drawGui() {
-  bool g_SwapChainRebuild = false;
-  VkSemaphore image_acquired_semaphore =
-      m_imguiWindow.FrameSemaphores[m_imguiWindow.SemaphoreIndex]
-          .ImageAcquiredSemaphore;
-  VkSemaphore render_complete_semaphore =
-      m_imguiWindow.FrameSemaphores[m_imguiWindow.SemaphoreIndex]
-          .RenderCompleteSemaphore;
-
-  VkResult err = vkAcquireNextImageKHR(
-      m_device, m_imguiWindow.Swapchain, UINT64_MAX, image_acquired_semaphore,
-      VK_NULL_HANDLE, &m_imguiWindow.FrameIndex);
-
-  if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR)
-    g_SwapChainRebuild = true;
-  if (err == VK_ERROR_OUT_OF_DATE_KHR)
-    return;
-
-  ImGui_ImplVulkanH_Frame *fd = &m_imguiWindow.Frames[m_imguiWindow.FrameIndex];
-  {
-    err = vkWaitForFences(
-        m_device, 1, &fd->Fence, VK_TRUE,
-        UINT64_MAX); // wait indefinitely instead of periodically checking
-
-    err = vkResetFences(m_device, 1, &fd->Fence);
-  }
-  {
-    err = vkResetCommandPool(m_device, fd->CommandPool, 0);
-    VkCommandBufferBeginInfo info = {};
-    info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    err = vkBeginCommandBuffer(fd->CommandBuffer, &info);
-  }
-  {
-    VkRenderPassBeginInfo info = {};
-    info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    info.renderPass = m_imguiWindow.RenderPass;
-    info.framebuffer = fd->Framebuffer;
-    info.renderArea.extent.width = m_imguiWindow.Width;
-    info.renderArea.extent.height = m_imguiWindow.Height;
-    info.clearValueCount = 1;
-    info.pClearValues = &m_imguiWindow.ClearValue;
-    vkCmdBeginRenderPass(fd->CommandBuffer, &info, VK_SUBPASS_CONTENTS_INLINE);
-  }
-  // Start the Dear ImGui frame
-  ImGui_ImplVulkan_NewFrame();
-  ImGui_ImplGlfw_NewFrame();
-  ImGui::NewFrame();
-
-  // Rendering
-  ImGui::Render();
-  ImDrawData *draw_data = ImGui::GetDrawData();
-
-  // Record dear imgui primitives into command buffer
-  ImGui_ImplVulkan_RenderDrawData(draw_data, fd->CommandBuffer);
-  // Submit command buffer
-  vkCmdEndRenderPass(fd->CommandBuffer);
-  {
-    VkPipelineStageFlags wait_stage =
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkSubmitInfo info = {};
-    info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    info.waitSemaphoreCount = 1;
-    info.pWaitSemaphores = &image_acquired_semaphore;
-    info.pWaitDstStageMask = &wait_stage;
-    info.commandBufferCount = 1;
-    info.pCommandBuffers = &fd->CommandBuffer;
-    info.signalSemaphoreCount = 1;
-    info.pSignalSemaphores = &render_complete_semaphore;
-
-    err = vkEndCommandBuffer(fd->CommandBuffer);
-    err = vkQueueSubmit(m_queue, 1, &info, fd->Fence);
-  }
-}
 void Renderer::createLogicalDevice() {
 
   m_queueFamilyIndices = findQueueFamilies(m_physicalDevice);

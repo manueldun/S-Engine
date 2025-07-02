@@ -335,7 +335,6 @@ private:
   void createUniformBuffers();
   uint32_t findMemoryType(const uint32_t &typeFilter,
                           const VkMemoryPropertyFlags &properties);
-  void drawGui();
   ImGui_ImplVulkanH_Window m_imguiWindow;
   std::vector<BufferData> m_loadedBufferData;
 
