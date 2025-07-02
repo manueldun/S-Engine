@@ -1247,11 +1247,10 @@ void Renderer::drawFrame() {
   vkWaitForFences(m_device, 1, &m_inFlightFences[m_currentFrame], VK_TRUE,
                   UINT64_MAX);
 
-  uint32_t currentSwapChainImageIndex = 0;
   VkResult result =
       vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX,
                             m_imageAvailableSemaphores[m_currentFrame],
-                            VK_NULL_HANDLE, &currentSwapChainImageIndex);
+                            VK_NULL_HANDLE, &m_currentFrame);
 
   if (result == VK_ERROR_OUT_OF_DATE_KHR) {
     m_framebufferResized = false;
@@ -1278,7 +1277,7 @@ void Renderer::drawFrame() {
   renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   renderPassBeginInfo.renderPass = m_renderPass;
   renderPassBeginInfo.framebuffer =
-      m_swapChainFramebuffers[currentSwapChainImageIndex];
+      m_swapChainFramebuffers[m_currentFrame];
   renderPassBeginInfo.renderArea.offset = {0, 0};
   renderPassBeginInfo.renderArea.extent = swapChainExtent;
 
@@ -1430,7 +1429,7 @@ void Renderer::drawFrame() {
   VkSwapchainKHR swapchains[] = {m_swapchain};
   presentInfo.swapchainCount = 1;
   presentInfo.pSwapchains = swapchains;
-  presentInfo.pImageIndices = &currentSwapChainImageIndex;
+  presentInfo.pImageIndices = &m_currentFrame;
   presentInfo.pResults = nullptr;
 
   result = vkQueuePresentKHR(m_queue, &presentInfo);
