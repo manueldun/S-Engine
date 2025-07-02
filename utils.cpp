@@ -27,6 +27,11 @@ std::vector<char> readFile(const std::string &filename) {
 
   return buffer;
 }
+
+glm::mat3 star(const glm::vec3 &a) {
+  return glm::mat3(glm::vec3(0.0f, -a.z, a.y), glm::vec3(a.z, 0.0f, -a.x),
+                   glm::vec3(-a.y, a.x, 0.0f));
+}
 /* Determines if the normal of a triangle points towards a point following the
  * right hand ordering to determinate the triangle normal direction
  */

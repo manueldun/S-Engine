@@ -31,6 +31,7 @@
 #include <limits> // Necessary for std::numeric_limits
 #include <set>
 #include <stdexcept>
+
 Renderer::Renderer() { init(); }
 std::vector<VkVertexInputBindingDescription> Vertex::getBindingDescriptions() {
   VkVertexInputBindingDescription bindingDescription{};
@@ -745,6 +746,7 @@ VkPipeline Renderer::createGraphicPipeline(
 
   return m_pipeline;
 }
+
 void Renderer::createFramebuffers() {
   m_swapChainFramebuffers.resize(m_swapChainImageViews.size());
 
@@ -926,6 +928,7 @@ void Renderer::endSingleTimeCommands(VkCommandBuffer &commandBuffer) {
 
   vkFreeCommandBuffers(m_device, m_commandPool, 1, &commandBuffer);
 }
+
 void Renderer::copyBuffer(const VkBuffer &srcBuffer, const VkBuffer &dstBuffer,
                           const VkDeviceSize &size) {
   VkCommandBuffer commandBuffer = beginSingleTimeCommands();
@@ -1276,8 +1279,7 @@ void Renderer::drawFrame() {
   VkRenderPassBeginInfo renderPassBeginInfo{};
   renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   renderPassBeginInfo.renderPass = m_renderPass;
-  renderPassBeginInfo.framebuffer =
-      m_swapChainFramebuffers[m_currentFrame];
+  renderPassBeginInfo.framebuffer = m_swapChainFramebuffers[m_currentFrame];
   renderPassBeginInfo.renderArea.offset = {0, 0};
   renderPassBeginInfo.renderArea.extent = swapChainExtent;
 
@@ -1511,6 +1513,7 @@ void Renderer::createVMA() {
 }
 
 bool Renderer::shouldExit() { return glfwWindowShouldClose(m_window); }
+
 void Renderer::cleanupSwapChain() {
   for (auto &framebuffer : m_swapChainFramebuffers) {
     vkDestroyFramebuffer(m_device, framebuffer, nullptr);
@@ -1596,6 +1599,7 @@ void Renderer::cleanup() {
 
   glfwDestroyWindow(m_window);
 }
+
 VKAPI_ATTR VkBool32 VKAPI_CALL Renderer::debugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -1604,6 +1608,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL Renderer::debugCallback(
   std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
   return VK_FALSE;
 }
+
 void Renderer::createImage(const uint32_t &width, const uint32_t &height,
                            const VkFormat &format, const VkImageTiling &tiling,
                            const VkImageUsageFlags &usage,
@@ -1632,6 +1637,7 @@ void Renderer::createImage(const uint32_t &width, const uint32_t &height,
   vmaCreateImage(m_vmaAllocator, &imageCreateInfo, &allocationCreateInfo,
                  &image, &allocation, nullptr);
 }
+
 VkResult CreateDebugUtilsMessengerEXT(
     const VkInstance &instance,
     const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
@@ -1645,6 +1651,7 @@ VkResult CreateDebugUtilsMessengerEXT(
     return VK_ERROR_EXTENSION_NOT_PRESENT;
   }
 }
+
 void DestroyDebugUtilsMessengerEXT(
     const VkInstance &instance, const VkDebugUtilsMessengerEXT &debugMessenger,
     const VkAllocationCallbacks *pAllocator) {
@@ -1654,6 +1661,7 @@ void DestroyDebugUtilsMessengerEXT(
     func(instance, debugMessenger, pAllocator);
   }
 }
+
 RenderObject Renderer::loadModel(const tinygltf::Model &model) {
 
   m_loadedTextures.reserve(model.images.size() + m_loadedTextures.size());
@@ -2099,15 +2107,16 @@ RenderObject Renderer::loadModel(const tinygltf::Model &model) {
   }
   return RenderObject(nodes, model);
 }
+
 Drawble::Drawble(const BufferData &bufferData, const VkPipeline &pipeline,
                  const uint32_t indexOffset, const uint32_t count,
                  const VkIndexType &indexType, const uint32_t &indexToTexture,
                  const uint32_t &indexToDescriptor)
     : m_bufferData(bufferData), m_pipeline(pipeline),
       m_indexOffset(indexOffset), m_count(count), m_indexType(indexType),
-      m_indexToTexture(indexToTexture), m_indexToDescriptor(indexToDescriptor)
+      m_indexToTexture(indexToTexture), m_indexToDescriptor(indexToDescriptor) {
+}
 
-{}
 Texture::Texture(const VkImage &image, const VkImageView &imageView,
                  const VmaAllocation &allocation, const VkSampler &sampler,
                  const std::vector<VkDescriptorSet> &descriptorSet)
@@ -2119,8 +2128,10 @@ void Texture::clean(const VkDevice &device,
   vmaDestroyImage(allocator, m_image, m_allocation);
   vkDestroySampler(device, m_sampler, nullptr);
 }
+
 MemoryData::MemoryData(const VkBuffer &buffer, const VmaAllocation &allocation)
     : m_buffer(buffer), m_allocation(allocation) {}
+
 void Renderer::resizeDescriptorSets() {
 
   UniformBufferObject ubo{};
@@ -2136,9 +2147,11 @@ void Renderer::resizeDescriptorSets() {
     memcpy(m_uniformBufferMapped[currentImage], &ubo, sizeof(ubo));
   }
 }
+
 Node::Node(const std::string &name, const std::vector<Drawble> &drawbles,
            const glm::mat4 &initialMatrix)
     : m_matrix(initialMatrix), m_name(name), m_drawbles(drawbles) {}
+
 void Renderer::createDescriptorSetLayouts() {
 
   {
@@ -2174,6 +2187,7 @@ void Renderer::createDescriptorSetLayouts() {
                                 &m_textureDescriptorSetLayout);
   }
 }
+
 void Renderer::createDescriptorPool() {
   std::array<VkDescriptorPoolSize, 2> poolSizes{};
   poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
@@ -2195,6 +2209,7 @@ void Renderer::createDescriptorPool() {
     throw std::runtime_error("Error creating descriptor pool on gltf load!");
   }
 }
+
 void Renderer::allocateUboDescriptorSets() {
 
   m_uboDescriptorSets.resize(m_imageCount);
@@ -2284,25 +2299,32 @@ Renderer::allocateTextureDescriptorSet(const VkImageView &imageview,
   vkUpdateDescriptorSets(m_device, writes.size(), writes.data(), 0, nullptr);
   return descriptorSets;
 }
+
 void Renderer::setMatrix(const uint32_t &index, const glm::mat4 &matrix) {
   m_modelMatrices.at(index) = matrix;
 }
+
 RenderObject::RenderObject(const std::vector<Node> &nodes,
                            const tinygltf::Model &model)
     : m_nodes(nodes), m_model(model) {}
 void RenderObject::setMatrix(const glm::mat4 &matrix, const uint32_t index) {
   m_nodes.at(0).setMatrix(matrix);
 }
+
 glm::mat4 Node::getInitialMatrix() const { return m_matrix; }
+
 void Renderer::draw(RenderObject *const renderObject) {
   for (auto &node : renderObject->m_nodes) {
     m_pNodeToDraw.push_back(&node);
   }
 }
+
 void Renderer::drawLabel(const std::string *label) {
   m_guiLabels.push_back(label);
 }
+
 void Node::setMatrix(const glm::mat4 &matrix) { m_matrix = matrix; }
+
 void Renderer::endFrame() {
   drawFrame();
   m_pNodeToDraw.clear();

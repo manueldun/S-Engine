@@ -20,6 +20,7 @@ private:
   glm::vec3 m_dPosition;
   glm::vec3 m_dVelocity;
 };
+
 class Plane {
 public:
   Plane() = delete;
@@ -30,6 +31,7 @@ private:
   const glm::vec3 m_point;
   const glm::vec3 m_normal;
 };
+
 class Particle {
 public:
   friend class ParticleSystem;
@@ -45,6 +47,7 @@ private:
   glm::vec3 m_velocity;
   glm::vec3 m_forceAcumulator;
 };
+
 class ParticleSystem {
 public:
   void eulerStep(const float &delta);
@@ -64,12 +67,14 @@ public:
 
 private:
 };
+
 struct State {
   glm::vec3 m_velocity;
   glm::vec3 m_angularVelocity;
   glm::vec3 m_forces;
   glm::vec3 m_torques;
 };
+
 class RigidBody {
 public:
   RigidBody(const float &mass, const glm::mat3 &Ibody,
@@ -115,6 +120,7 @@ private:
   float m_time = 0.0f;
 
 };
+
 class RigidBodySystem {
 public:
   void eulerStep(const float &delta);
@@ -132,5 +138,5 @@ public:
 private:
   std::vector<RigidBody> m_rigidBodies;
 };
-glm::mat3 star(const glm::vec3 &a);
+
 } // namespace Physics

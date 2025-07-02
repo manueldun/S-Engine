@@ -1,5 +1,4 @@
 #pragma once
-#include <array>
 #include <cstdint>
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -10,6 +9,8 @@
 #include <vector>
 
 std::vector<char> readFile(const std::string &filename);
+
+glm::mat3 star(const glm::vec3 &a);
 
 bool isTowardsPlaneNormal(const std::span<const glm::vec3, 3> &trianglePlane,
                           const glm::vec3 &point);
