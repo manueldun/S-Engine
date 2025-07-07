@@ -411,8 +411,8 @@ const glm::mat3 getInertiaTensor(const std::span<const glm::vec3> &vertices,
   }
   return acumulatedInertialTensor / static_cast<float>(numsOfTetrahedrons);
 }
-const bool doCollide(const std::span<const glm::vec3> vertices1,
-                     const std::span<const glm::vec3> vertices2) {
+const bool doCollideVertexBased(const std::span<const glm::vec3> vertices1,
+                                const std::span<const glm::vec3> vertices2) {
   for (size_t i = 0; i < vertices1.size() - 3; i++) {
     const std::span<const glm::vec3> vertexPlane = vertices1.subspan(i, 3);
     bool allOnOneSide = true;
@@ -430,6 +430,61 @@ const bool doCollide(const std::span<const glm::vec3> vertices1,
           return false;
         }
       }
+    }
+  }
+  return true;
+}
+
+const bool
+doCollideTriangleMeshBased(const std::span<const glm::vec3> vertices1,
+                           const std::span<const glm::vec3> vertices2) {
+  assert(vertices1.size() % 3 == 0);
+  assert(vertices2.size() % 3 == 0);
+  for (size_t i = 0; i < vertices1.size() - 3; i += 3) {
+    const std::span<const glm::vec3> vertexPlane = vertices1.subspan(i, 3);
+    bool isTowards = true;
+    for (const glm::vec3 &vertex : vertices2) {
+      if (!isTowardsPlaneNormal(vertexPlane, vertex)) {
+        isTowards = false;
+      }
+    }
+    if (isTowards) {
+      isTowards = false;
+      for (int j = 0; j < vertices2.size(); j += 3) {
+        if (i != j && !isTowardsPlaneNormal(vertexPlane, vertices1[j])) {
+          return true;
+        }
+      }
+      return false;
+    }
+  }
+  return true;
+}
+
+template <typename T>
+const bool doCollideIndexedTriangleMeshBased(
+    const std::span<const glm::vec3> vertices1, const std::span<T> indices1,
+    const std::span<const glm::vec3> vertices2, const std::span<T> indices2) {
+  assert(vertices1.size() % 3 == 0);
+  assert(vertices2.size() % 3 == 0);
+  for (size_t i = 0; i < vertices1.size() - 3; i += 3) {
+    const std::array<glm::vec3, 3> vertexPlane = {
+        vertices1[i], vertices1[i + 1], vertices1[i + 2]};
+    bool isTowards = true;
+    for (const glm::vec3 &vertex : vertices2) {
+      if (!isTowardsPlaneNormal(std::span(vertexPlane), vertex)) {
+        isTowards = false;
+      }
+    }
+    if (isTowards) {
+      isTowards = false;
+      for (int j = 0; j < vertices2.size(); j++) {
+        if (i != j &&
+            !isTowardsPlaneNormal(std::span(vertexPlane), vertices1[j])) {
+          return true;
+        }
+      }
+      return false;
     }
   }
   return true;

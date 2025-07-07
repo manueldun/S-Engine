@@ -52,3 +52,10 @@ const glm::mat3 getInertiaTensor(const std::span<const glm::vec3> &vertices,
 
 const bool doCollide(const std::span<const glm::vec3> vertices1,
                      const std::span<const glm::vec3> vertices2);
+const bool
+doCollideTriangleMeshBased(const std::span<const glm::vec3> vertices1,
+                           const std::span<const glm::vec3> vertices2);
+template <typename T>
+const bool doCollideIndexedTriangleMeshBased(
+    const std::span<const glm::vec3> vertices1, const std::span<T> indices1,
+    const std::span<const glm::vec3> vertices2, const std::span<T> indices2);
