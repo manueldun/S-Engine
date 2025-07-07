@@ -82,13 +82,13 @@ public:
             const glm::quat &initialOrientation,
             const glm::vec3 &initialVelocity,
             const glm::vec3 &initialAngularVelocity);
-  RigidBody(
-      const std::span<const glm::vec3> &vertices, const float &mass,
-      const glm::mat3 &Ibody = glm::mat3(0.0f),
-      const glm::vec3 &initialPosition = glm::vec3(0.0f),
-      const glm::quat &initialOrientation = glm::quat(0.0f, 0.0f, 0.0f, 1.0f),
-      const glm::vec3 &initialVelocity = glm::vec3(0.0f),
-      const glm::vec3 &initialAngularVelocity = glm::vec3(0.0f));
+  RigidBody(const std::span<const glm::vec3> &vertices, const float &mass,
+            const glm::mat3 &Ibody = glm::mat3(0.0f),
+            const glm::vec3 &initialPosition = glm::vec3(0.0f),
+            const glm::quat &initialOrientation = glm::quat(0.0f, 0.0f, 0.0f,
+                                                            1.0f),
+            const glm::vec3 &initialVelocity = glm::vec3(0.0f),
+            const glm::vec3 &initialAngularVelocity = glm::vec3(0.0f));
   const State getDerivative(const glm::vec3 &forces,
                             const glm::vec3 &torques) const;
   void eulerStep(const float &delta);
@@ -118,7 +118,6 @@ private:
   glm::vec3 m_torque = glm::vec3(0.0f);
 
   float m_time = 0.0f;
-
 };
 
 class RigidBodySystem {
