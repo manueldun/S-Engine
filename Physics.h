@@ -2,6 +2,7 @@
 #include "Renderer.h"
 #include "glm/ext/vector_float3.hpp"
 #include "glm/fwd.hpp"
+#include "utils.h"
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/quaternion.hpp"
 #include <span>
@@ -74,19 +75,15 @@ struct State {
   glm::vec3 m_forces;
   glm::vec3 m_torques;
 };
-
 class RigidBody {
 public:
-  RigidBody(const float &mass, const glm::mat3 &Ibody,
-            const glm::vec3 &initialPosition,
-            const glm::quat &initialOrientation,
-            const glm::vec3 &initialVelocity,
-            const glm::vec3 &initialAngularVelocity);
-  RigidBody(const std::span<const glm::vec3> &vertices, const float &mass,
+  RigidBody(const std::span<const glm::vec3> &vertices,
+            const IndexDataSpan &indexSpan, const float &mass,
             const glm::mat3 &Ibody = glm::mat3(0.0f),
             const glm::vec3 &initialPosition = glm::vec3(0.0f),
-            const glm::quat &initialOrientation = glm::quat(0.0f, 0.0f, 0.0f,
-                                                            1.0f),
+            const glm::quat &initialOrientation =
+                glm::rotate(glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
+                            glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f)),
             const glm::vec3 &initialVelocity = glm::vec3(0.0f),
             const glm::vec3 &initialAngularVelocity = glm::vec3(0.0f));
   const State getDerivative(const glm::vec3 &forces,
@@ -95,11 +92,18 @@ public:
   void addForcesAndTorques(const glm::vec3 &force, const glm::vec3 &torque);
   void clearForcesAndTorques();
   glm::vec3 getPosition() const;
+  void setPosition(const glm::vec3 &position);
   glm::quat getOrientation() const;
+  void setOrientation(const glm::quat &orientation);
   bool doesIntersect(const RigidBody &rigidBody) const;
+  const IndexDataSpan getIndexSpan() const;
+  const std::span<const glm::vec3> getVertices() const;
+  const glm::mat4 getTransform() const;
 
 private:
+  const glm::quat getStandardOrientation() const;
   const std::span<const glm::vec3> m_vertices;
+  const IndexDataSpan m_indexSpan;
   const float m_mass;
   const glm::mat3 m_Ibody;
   const glm::mat3 m_IbodyInv;
@@ -119,23 +123,33 @@ private:
 
   float m_time = 0.0f;
 };
-
+class Body;
 class RigidBodySystem {
 public:
   void eulerStep(const float &delta);
   void addRigidBody(const RigidBody &rigidBody);
-  RigidBody &addMesh(const tinygltf::Model &model, const float &mass,
-                     const glm::vec3 &initialPosition = glm::vec3(0.0f),
-                     const glm::quat &initialOrientation = glm::quat(0.0f, 0.0f,
-                                                                     0.0f,
-                                                                     1.0f),
-                     const glm::vec3 &initialVelocity = glm::vec3(0.0f),
-                     const glm::vec3 &initialAngularVelocity = glm::vec3(0.0f));
+  Body addMesh(const tinygltf::Model &model, const float &mass,
+               const glm::vec3 &initialPosition = glm::vec3(0.0f),
+               const glm::quat &initialOrientation = glm::quat(1.0f, 0.0f, 0.0f,
+                                                               0.0f),
+               const glm::vec3 &initialVelocity = glm::vec3(0.0f),
+               const glm::vec3 &initialAngularVelocity = glm::vec3(0.0f));
+  const glm::vec3 getPosition(const uint32_t index);
+  const glm::mat4 getTransform(const uint32_t index);
 
   static constexpr float c_gravity = 9.8f;
 
 private:
   std::vector<RigidBody> m_rigidBodies;
 };
+class Body {
+public:
+  Body(const uint32_t index, RigidBodySystem &system);
+  glm::vec3 getPosition() const;
+  glm::mat4 getTransform() const;
 
+private:
+  const uint32_t m_index;
+  RigidBodySystem &m_system;
+};
 } // namespace Physics

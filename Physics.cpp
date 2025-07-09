@@ -1,9 +1,11 @@
 #include "Physics.h"
 #include "glm/common.hpp"
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/ext/quaternion_transform.hpp"
 #include "glm/geometric.hpp"
 #include "glm/gtc/quaternion.hpp"
 #include "utils.h"
-#include <stdexcept>
+#include <iostream>
 #include <sys/wait.h>
 namespace Physics {
 ParticleDerivative::ParticleDerivative(const glm::vec3 &dPosition,
@@ -103,25 +105,15 @@ glm::vec3 ParticleSystem::getParticlePosition(const uint32_t &index) const {
   return m_particles.at(index).m_position;
 }
 
-RigidBody::RigidBody(const float &mass, const glm::mat3 &Ibody,
-                     const glm::vec3 &initialPosition,
+RigidBody::RigidBody(const std::span<const glm::vec3> &vertices,
+                     const IndexDataSpan &indexSpan, const float &mass,
+                     const glm::mat3 &Ibody, const glm::vec3 &initialPosition,
                      const glm::quat &initialOrientation,
                      const glm::vec3 &initialVelocity,
                      const glm::vec3 &initialAngularVelocity)
-    : m_mass(mass), m_Ibody(Ibody), m_IbodyInv(glm::inverse(Ibody)),
+    : m_vertices(vertices), m_indexSpan(indexSpan), m_mass(mass),
+      m_Ibody(Ibody), m_IbodyInv(glm::inverse(Ibody)),
       m_position(initialPosition), m_orientation(initialOrientation),
-      m_linearMomentum(initialVelocity * m_mass),
-      m_angularMomentum(Ibody * initialAngularVelocity) {}
-
-RigidBody::RigidBody(const std::span<const glm ::vec3> &vertices,
-                     const float &mass, const glm::mat3 &Ibody,
-                     const glm::vec3 &initialPosition,
-                     const glm::quat &initialOrientation,
-                     const glm::vec3 &initialVelocity,
-                     const glm::vec3 &initialAngularVelocity)
-    : m_vertices(vertices), m_mass(mass), m_Ibody(Ibody),
-      m_IbodyInv(glm::inverse(Ibody)), m_position(initialPosition),
-      m_orientation(initialOrientation),
       m_linearMomentum(initialVelocity * m_mass),
       m_angularMomentum(Ibody * initialAngularVelocity) {}
 
@@ -130,7 +122,7 @@ const State Physics::RigidBody::getDerivative(const glm::vec3 &forces,
   State derivativeState = {};
   derivativeState.m_velocity = getVelocity();
   derivativeState.m_angularVelocity = getAngularVelocity();
-  derivativeState.m_forces = forces + glm::vec3(0.0f, 0.0f, -1.0f) *
+  derivativeState.m_forces = forces + glm::vec3(0.0f, -1.0f, 0.0f) *
                                           RigidBodySystem::c_gravity * m_mass;
   derivativeState.m_torques = torques;
   return derivativeState;
@@ -158,11 +150,154 @@ void RigidBody::clearForcesAndTorques() {
 
 glm::vec3 RigidBody::getPosition() const { return m_position; }
 
-glm::quat RigidBody::getOrientation() const { return m_orientation; }
+void RigidBody::setPosition(const glm::vec3 &position) {
+  m_position = position;
+}
 
+glm::quat RigidBody::getOrientation() const {
+  return m_orientation * getStandardOrientation();
+}
+
+void RigidBody::setOrientation(const glm::quat &orientation) {
+  m_orientation = orientation;
+}
 bool RigidBody::doesIntersect(const RigidBody &rigidBody) const {
-  throw std::runtime_error("intersection test not implemented yet");
-  return false;
+  switch (rigidBody.getIndexSpan().getBytesPerInt()) {
+  case 1:
+    switch (m_indexSpan.getBytesPerInt()) {
+    case 1: {
+      const std::span<const uint8_t> span81 = m_indexSpan.getIndexSpan();
+      const std::span<const uint8_t> span82 =
+          rigidBody.getIndexSpan().getIndexSpan();
+      return doCollideIndexedTriangleMeshBased(
+          m_vertices, span81, getTransform(), rigidBody.getVertices(), span82,
+          rigidBody.getTransform());
+      break;
+    }
+    case 2: {
+      const uint16_t *indexPtr =
+          reinterpret_cast<const uint16_t *>(m_indexSpan.getIndexSpan().data());
+      const std::span<const uint16_t> span16(
+          indexPtr, m_indexSpan.getIndexSpan().size() / 2);
+      return doCollideIndexedTriangleMeshBased(
+          m_vertices, span16, getTransform(), rigidBody.getVertices(),
+          rigidBody.getIndexSpan().getIndexSpan(), rigidBody.getTransform());
+      break;
+    }
+    case 4: {
+      const uint32_t *indexPtr =
+          reinterpret_cast<const uint32_t *>(m_indexSpan.getIndexSpan().data());
+      const std::span<const uint32_t> span32(
+          indexPtr, m_indexSpan.getIndexSpan().size() / 4);
+
+      return doCollideIndexedTriangleMeshBased(
+          m_vertices, span32, getTransform(), rigidBody.getVertices(),
+          rigidBody.getIndexSpan().getIndexSpan(), rigidBody.getTransform());
+    } break;
+    }
+  case 2:
+    switch (m_indexSpan.getBytesPerInt()) {
+    case 1: {
+      {
+        const uint16_t *indexPtr1 = reinterpret_cast<const uint16_t *>(
+            rigidBody.getIndexSpan().getIndexSpan().data());
+        const std::span<const uint16_t> span16(
+            indexPtr1, rigidBody.getIndexSpan().getIndexSpan().size() / 2);
+        return doCollideIndexedTriangleMeshBased(
+            m_vertices, span16, getTransform(), rigidBody.getVertices(),
+            rigidBody.getIndexSpan().getIndexSpan(), rigidBody.getTransform());
+        break;
+      }
+    case 2: {
+      const uint16_t *indexPtr1 =
+          reinterpret_cast<const uint16_t *>(m_indexSpan.getIndexSpan().data());
+      const std::span<const uint16_t> span161(
+          indexPtr1, m_indexSpan.getIndexSpan().size() / 2);
+
+      const uint16_t *indexPtr2 = reinterpret_cast<const uint16_t *>(
+          rigidBody.getIndexSpan().getIndexSpan().data());
+      const std::span<const uint16_t> span162(
+          indexPtr2, rigidBody.getIndexSpan().getIndexSpan().size() / 2);
+
+      return doCollideIndexedTriangleMeshBased(
+          m_vertices, span161, getTransform(), rigidBody.getVertices(), span162,
+          rigidBody.getTransform());
+      break;
+    }
+    case 4: {
+      const uint32_t *indexPtr1 =
+          reinterpret_cast<const uint32_t *>(m_indexSpan.getIndexSpan().data());
+      const std::span<const uint32_t> span321(
+          indexPtr1, m_indexSpan.getIndexSpan().size() / 4);
+      const uint16_t *indexPtr2 = reinterpret_cast<const uint16_t *>(
+          rigidBody.getIndexSpan().getIndexSpan().data());
+      const std::span<const uint16_t> span162(
+          indexPtr2, rigidBody.getIndexSpan().getIndexSpan().size() / 2);
+      return doCollideIndexedTriangleMeshBased(
+          m_vertices, span321, getTransform(), rigidBody.getVertices(), span162,
+          rigidBody.getTransform());
+      break;
+    }
+    }
+    }
+  case 4:
+    switch (m_indexSpan.getBytesPerInt()) {
+    case 1: {
+      {
+        const uint32_t *indexPtr1 = reinterpret_cast<const uint32_t *>(
+            rigidBody.getIndexSpan().getIndexSpan().data());
+        const std::span<const uint32_t> span32(
+            indexPtr1, rigidBody.getIndexSpan().getIndexSpan().size() / 4);
+        return doCollideIndexedTriangleMeshBased(
+            m_vertices, span32, getTransform(), rigidBody.getVertices(),
+            rigidBody.getIndexSpan().getIndexSpan(), rigidBody.getTransform());
+        break;
+      }
+    case 2: {
+      const uint32_t *indexPtr1 =
+          reinterpret_cast<const uint32_t *>(m_indexSpan.getIndexSpan().data());
+      const std::span<const uint32_t> span321(
+          indexPtr1, m_indexSpan.getIndexSpan().size() / 4);
+      const uint16_t *indexPtr2 = reinterpret_cast<const uint16_t *>(
+          rigidBody.getIndexSpan().getIndexSpan().data());
+      const std::span<const uint16_t> span162(
+          indexPtr2, rigidBody.getIndexSpan().getIndexSpan().size() / 2);
+      return doCollideIndexedTriangleMeshBased(
+          m_vertices, span321, getTransform(), rigidBody.getVertices(), span162,
+          rigidBody.getTransform());
+      break;
+    } break;
+    case 4: {
+      const uint32_t *indexPtr1 =
+          reinterpret_cast<const uint32_t *>(m_indexSpan.getIndexSpan().data());
+      const std::span<const uint32_t> span321(
+          indexPtr1, m_indexSpan.getIndexSpan().size() / 4);
+      const uint32_t *indexPtr2 = reinterpret_cast<const uint32_t *>(
+          rigidBody.getIndexSpan().getIndexSpan().data());
+      const std::span<const uint32_t> span322(
+          indexPtr2, rigidBody.getIndexSpan().getIndexSpan().size() / 4);
+      return doCollideIndexedTriangleMeshBased(
+          m_vertices, span321, getTransform(), rigidBody.getVertices(), span322,
+          rigidBody.getTransform());
+      break;
+    }
+    }
+    }
+  }
+  assert(false);
+}
+const IndexDataSpan RigidBody::getIndexSpan() const { return m_indexSpan; }
+const std::span<const glm::vec3> RigidBody::getVertices() const {
+  return m_vertices;
+}
+const glm::mat4 RigidBody::getTransform() const {
+
+  const glm::quat orientation = getOrientation();
+  return glm::translate(glm::mat4_cast(orientation), getPosition());
+}
+const glm::quat RigidBody::getStandardOrientation() const {
+  return glm::rotate(glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::radians(90.0f),
+                     glm::vec3(1.0f, 0.0f, 0.0f));
 }
 
 glm::mat3 RigidBody::getInertialTensor() const {
@@ -175,7 +310,13 @@ glm::mat3 RigidBody::getInvInertialTensor() const {
   return orientation * m_IbodyInv * glm::transpose(orientation);
 }
 
-glm::vec3 RigidBody::getVelocity() const { return m_linearMomentum / m_mass; }
+glm::vec3 RigidBody::getVelocity() const {
+  if (m_mass == 0.0f) {
+    return glm::vec3(0.0f);
+  } else {
+    return m_linearMomentum / m_mass;
+  }
+}
 glm::vec3 RigidBody::getAngularVelocity() const {
   return (getInvInertialTensor() * m_angularMomentum);
 }
@@ -187,18 +328,25 @@ void RigidBodySystem::eulerStep(const float &delta) {
     rigidBody.eulerStep(delta);
     rigidBody.clearForcesAndTorques();
   }
+  for (size_t i = 0; i < m_rigidBodies.size(); i++) {
+
+    for (size_t j = i + 1; j < m_rigidBodies.size(); j++) {
+      if (i != j && m_rigidBodies[i].doesIntersect(m_rigidBodies[j])) {
+        std::cout << "Collided! " << i << " with " << j << std::endl;
+      }
+    }
+  }
 }
 
 void RigidBodySystem::addRigidBody(const RigidBody &rigidBody) {
   m_rigidBodies.push_back(rigidBody);
 }
 
-RigidBody &RigidBodySystem::addMesh(const tinygltf::Model &model,
-                                    const float &mass,
-                                    const glm::vec3 &initialPosition,
-                                    const glm::quat &initialOrientation,
-                                    const glm::vec3 &initialVelocity,
-                                    const glm::vec3 &initialAngularVelocity) {
+Body RigidBodySystem::addMesh(const tinygltf::Model &model, const float &mass,
+                              const glm::vec3 &initialPosition,
+                              const glm::quat &initialOrientation,
+                              const glm::vec3 &initialVelocity,
+                              const glm::vec3 &initialAngularVelocity) {
 
   const std::span<const glm::vec3> verticesSpan =
       getVertexData(model, "POSITION");
@@ -207,14 +355,28 @@ RigidBody &RigidBodySystem::addMesh(const tinygltf::Model &model,
 
   const glm::vec3 &centerOfMass =
       getCenterOfMass(verticesSpan, indexSpan, false);
-  const glm::mat3 &inertialTensor =
-      getInertiaTensor(verticesSpan, indexSpan, false);
+  glm::mat3 inertialTensor = glm::mat3(1.0f);
+  if (mass != 0.0f) {
+    inertialTensor = getInertiaTensor(verticesSpan, indexSpan, false);
+  }
 
-  m_rigidBodies.push_back(RigidBody(
-      verticesSpan, mass, inertialTensor, initialPosition - centerOfMass,
-      initialOrientation, initialVelocity, initialAngularVelocity));
+  m_rigidBodies.push_back(
+      RigidBody(verticesSpan, indexSpan, mass, inertialTensor, initialPosition,
+                initialOrientation, initialVelocity, initialAngularVelocity));
 
-  return m_rigidBodies.back();
+  return Body(m_rigidBodies.size() - 1, *this);
+}
+const glm::vec3 RigidBodySystem::getPosition(const uint32_t index) {
+  return m_rigidBodies[index].getPosition();
+}
+const glm::mat4 RigidBodySystem::getTransform(const uint32_t index) {
+  const glm::quat orientation = m_rigidBodies[index].getOrientation();
+  return glm::translate(glm::mat4_cast(orientation),
+                        m_rigidBodies[index].getPosition());
 }
 
+Body::Body(const uint32_t index, RigidBodySystem &system)
+    : m_index(index), m_system(system) {}
+glm::vec3 Body::getPosition() const { return m_system.getPosition(m_index); }
+glm::mat4 Body::getTransform() const { return m_system.getTransform(m_index); }
 } // namespace Physics
