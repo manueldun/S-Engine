@@ -1239,9 +1239,11 @@ void Renderer::updateUniformBuffer(const uint32_t &currentImage) {
         swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
     ubo.projection[1][1] *= -1.0f;
 
-    memcpy(static_cast<UniformBufferObject *>(
-               m_uniformBufferMapped.at(currentImage)) +
-               objectIndex,
+    UniformBufferObject *uboPointer =
+        static_cast<UniformBufferObject *>(
+            m_uniformBufferMapped.at(currentImage)) +
+        objectIndex;
+    memcpy(uboPointer,
            &ubo, sizeof(UniformBufferObject));
   }
 }
@@ -1249,11 +1251,13 @@ void Renderer::updateUniformBuffer(const uint32_t &currentImage) {
 void Renderer::drawFrame() {
   vkWaitForFences(m_device, 1, &m_inFlightFences[m_currentFrame], VK_TRUE,
                   UINT64_MAX);
+  vkResetFences(m_device, 1, &m_inFlightFences[m_currentFrame]);
 
+  uint32_t imageIndex = 0;
   VkResult result =
       vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX,
                             m_imageAvailableSemaphores[m_currentFrame],
-                            VK_NULL_HANDLE, &m_currentFrame);
+                            VK_NULL_HANDLE, &imageIndex);
 
   if (result == VK_ERROR_OUT_OF_DATE_KHR) {
     m_framebufferResized = false;
@@ -1263,7 +1267,6 @@ void Renderer::drawFrame() {
     throw std::runtime_error("failed to acquire swap chain image!");
   }
 
-  vkResetFences(m_device, 1, &m_inFlightFences[m_currentFrame]);
   vkResetCommandBuffer(m_commandBuffers[m_currentFrame], 0);
 
   VkCommandBuffer commandBuffer = m_commandBuffers[m_currentFrame];
@@ -1276,21 +1279,6 @@ void Renderer::drawFrame() {
       VK_SUCCESS) {
     throw std::runtime_error("failed to begin recording command buffer");
   }
-  VkRenderPassBeginInfo renderPassBeginInfo{};
-  renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-  renderPassBeginInfo.renderPass = m_renderPass;
-  renderPassBeginInfo.framebuffer = m_swapChainFramebuffers[m_currentFrame];
-  renderPassBeginInfo.renderArea.offset = {0, 0};
-  renderPassBeginInfo.renderArea.extent = swapChainExtent;
-
-  std::array<VkClearValue, 2> clearValues{};
-  clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
-  clearValues[1].depthStencil = {1.0f, 0};
-
-  renderPassBeginInfo.pClearValues = clearValues.data();
-  renderPassBeginInfo.clearValueCount =
-      static_cast<uint32_t>(clearValues.size());
-
   VkPipelineStageFlags srcPipelineStageflags =
       VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
   VkPipelineStageFlags dstPipelineStageflags =
@@ -1310,6 +1298,21 @@ void Renderer::drawFrame() {
                        memoryBarrierCount, &memoryBarrier,
                        bufferMemoryBarrierCount, &bufferMemoryBarrier,
                        imageMemoryBarrierCount, &imageMemoryBarrier);
+  VkRenderPassBeginInfo renderPassBeginInfo{};
+  renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  renderPassBeginInfo.renderPass = m_renderPass;
+  renderPassBeginInfo.framebuffer = m_swapChainFramebuffers[m_currentFrame];
+  renderPassBeginInfo.renderArea.offset = {0, 0};
+  renderPassBeginInfo.renderArea.extent = swapChainExtent;
+
+  std::array<VkClearValue, 2> clearValues{};
+  clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+  clearValues[1].depthStencil = {1.0f, 0};
+
+  renderPassBeginInfo.pClearValues = clearValues.data();
+  renderPassBeginInfo.clearValueCount =
+      static_cast<uint32_t>(clearValues.size());
+
   vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo,
                        VK_SUBPASS_CONTENTS_INLINE);
 
@@ -1375,10 +1378,9 @@ void Renderer::drawFrame() {
                               0, nullptr);
     }
 
-    vkCmdDrawIndexed(
-        commandBuffer,
-        m_pNodeToDraw.at(drawbleIndex)->m_drawbles.at(drawbleIndex).m_count, 1,
-        0, 0, 0);
+    vkCmdDrawIndexed(commandBuffer,
+                     m_pNodeToDraw.at(drawbleIndex)->m_drawbles.at(0).m_count,
+                     1, 0, 0, 0);
 
     // vkCmdPipelineBarrier(commandBuffer, srcPipelineStageflags,
     //                      dstPipelineStageflags, dependencyFlags,
@@ -1417,7 +1419,7 @@ void Renderer::drawFrame() {
   submitInfo.commandBufferCount = 1;
   submitInfo.pCommandBuffers = &m_commandBuffers[m_currentFrame];
   submitInfo.signalSemaphoreCount = 1;
-  submitInfo.pSignalSemaphores = &m_renderFinishedSemaphores[m_currentFrame];
+  submitInfo.pSignalSemaphores = &m_renderFinishedSemaphores[imageIndex];
 
   if (vkQueueSubmit(m_queue, 1, &submitInfo,
                     m_inFlightFences[m_currentFrame]) != VK_SUCCESS) {
@@ -1426,12 +1428,12 @@ void Renderer::drawFrame() {
   VkPresentInfoKHR presentInfo{};
   presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
   presentInfo.waitSemaphoreCount = 1;
-  presentInfo.pWaitSemaphores = &m_renderFinishedSemaphores[m_currentFrame];
+  presentInfo.pWaitSemaphores = &m_renderFinishedSemaphores[imageIndex];
 
   VkSwapchainKHR swapchains[] = {m_swapchain};
   presentInfo.swapchainCount = 1;
   presentInfo.pSwapchains = swapchains;
-  presentInfo.pImageIndices = &m_currentFrame;
+  presentInfo.pImageIndices = &imageIndex;
   presentInfo.pResults = nullptr;
 
   result = vkQueuePresentKHR(m_queue, &presentInfo);
