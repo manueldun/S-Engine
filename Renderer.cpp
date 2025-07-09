@@ -1243,8 +1243,7 @@ void Renderer::updateUniformBuffer(const uint32_t &currentImage) {
         static_cast<UniformBufferObject *>(
             m_uniformBufferMapped.at(currentImage)) +
         objectIndex;
-    memcpy(uboPointer,
-           &ubo, sizeof(UniformBufferObject));
+    memcpy(uboPointer, &ubo, sizeof(UniformBufferObject));
   }
 }
 
@@ -1254,10 +1253,9 @@ void Renderer::drawFrame() {
   vkResetFences(m_device, 1, &m_inFlightFences[m_currentFrame]);
 
   uint32_t imageIndex = 0;
-  VkResult result =
-      vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX,
-                            m_imageAvailableSemaphores[m_currentFrame],
-                            VK_NULL_HANDLE, &imageIndex);
+  VkResult result = vkAcquireNextImageKHR(
+      m_device, m_swapchain, UINT64_MAX,
+      m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
 
   if (result == VK_ERROR_OUT_OF_DATE_KHR) {
     m_framebufferResized = false;
@@ -1668,6 +1666,7 @@ RenderObject Renderer::loadModel(const tinygltf::Model &model) {
 
   m_loadedTextures.reserve(model.images.size() + m_loadedTextures.size());
 
+  uint32_t newTextureIndex = m_loadedTextures.size();
   for (auto currentImage : model.images) {
 
     VkBuffer stagingColorImageBuffer;
@@ -2089,9 +2088,9 @@ RenderObject Renderer::loadModel(const tinygltf::Model &model) {
           vertexInputBindingDescriptions, vertexInputAttributeDescriptions);
       const uint32_t nextIndexToDescriptor = drawbles.size();
 
-      drawbles.push_back(Drawble(bufferData, pipeline, outputIndexOffset,
-                                 outputCount, indexType, outputIndexTexture,
-                                 nextIndexToDescriptor));
+      drawbles.push_back(Drawble(
+          bufferData, pipeline, outputIndexOffset, outputCount, indexType,
+          newTextureIndex + outputIndexTexture, nextIndexToDescriptor));
     }
     glm::mat4 initialMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f),
                                           glm::vec3(1.0f, 0.0f, 0.0f));
