@@ -10,6 +10,7 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_vulkan.h"
+#include <memory>
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/quaternion.hpp"
 
@@ -553,14 +554,16 @@ void Renderer::createRenderPass() {
   }
 }
 
-VkPipeline Renderer::createGraphicPipeline(
+Pipeline Renderer::createGraphicPipeline(
     const std::string &vertexShaderPath, const std::string &fragmentShaderPath,
     const std::vector<VkVertexInputBindingDescription>
         &vertexInputBindingDescriptions,
     const std::vector<VkVertexInputAttributeDescription>
-        &vertexInputAttributeDescriptions) {
-  std::vector<char> vertShaderCode = readFile("./shaders/vert.spv");
-  std::vector<char> fragShaderCode = readFile("./shaders/frag.spv");
+        &vertexInputAttributeDescriptions,
+    const VkPolygonMode &polygonMode, const VkCullModeFlags &cullMode,
+    const std::vector<VkDescriptorSetLayout> &pipelineLayouts) {
+  std::vector<char> vertShaderCode = readFile(vertexShaderPath);
+  std::vector<char> fragShaderCode = readFile(fragmentShaderPath);
 
   VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
   VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -637,9 +640,9 @@ VkPipeline Renderer::createGraphicPipeline(
       VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
   pipelineRasterizationStateCreateInfo.depthClampEnable = VK_FALSE;
   pipelineRasterizationStateCreateInfo.rasterizerDiscardEnable = VK_FALSE;
-  pipelineRasterizationStateCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
+  pipelineRasterizationStateCreateInfo.polygonMode = VK_POLYGON_MODE_LINE;
   pipelineRasterizationStateCreateInfo.lineWidth = 1.0f;
-  pipelineRasterizationStateCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+  pipelineRasterizationStateCreateInfo.cullMode = VK_CULL_MODE_NONE;
   pipelineRasterizationStateCreateInfo.frontFace =
       VK_FRONT_FACE_COUNTER_CLOCKWISE;
   pipelineRasterizationStateCreateInfo.depthBiasEnable = VK_FALSE;
@@ -682,17 +685,15 @@ VkPipeline Renderer::createGraphicPipeline(
   pipelineColorBlendStateCreateInfo.blendConstants[2] = 0.0f; // Optional
   pipelineColorBlendStateCreateInfo.blendConstants[3] = 0.0f; // Optional
 
-  std::array<VkDescriptorSetLayout, 2> layouts = {m_uboDescriptorSetLayout,
-                                                  m_textureDescriptorSetLayout};
-
   VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
   pipelineLayoutCreateInfo.sType =
       VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pipelineLayoutCreateInfo.setLayoutCount = layouts.size();
-  pipelineLayoutCreateInfo.pSetLayouts = layouts.data();
+  pipelineLayoutCreateInfo.setLayoutCount = pipelineLayouts.size();
+  pipelineLayoutCreateInfo.pSetLayouts = pipelineLayouts.data();
 
+  VkPipelineLayout pipelineLayout;
   if (vkCreatePipelineLayout(m_device, &pipelineLayoutCreateInfo, nullptr,
-                             &m_pipelineLayout) != VK_SUCCESS) {
+                             &pipelineLayout) != VK_SUCCESS) {
     throw std::runtime_error("failed to create pipeline layout");
   }
 
@@ -729,22 +730,23 @@ VkPipeline Renderer::createGraphicPipeline(
       &pipelineColorBlendStateCreateInfo;
   graphicsPipelineCreateInfo.pDynamicState =
       &dynamicStatepipelineDynamicStateCreateInfo;
-  graphicsPipelineCreateInfo.layout = m_pipelineLayout;
+  graphicsPipelineCreateInfo.layout = pipelineLayout;
   graphicsPipelineCreateInfo.renderPass = m_renderPass;
   graphicsPipelineCreateInfo.subpass = 0;
   graphicsPipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
   graphicsPipelineCreateInfo.basePipelineIndex = -1;              // Optional
 
+  VkPipeline pipeline;
   if (vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1,
                                 &graphicsPipelineCreateInfo, nullptr,
-                                &m_pipeline) != VK_SUCCESS) {
+                                &pipeline) != VK_SUCCESS) {
     throw std::runtime_error("failed creating graphics pipeline");
   }
 
   vkDestroyShaderModule(m_device, vertShaderModule, nullptr);
   vkDestroyShaderModule(m_device, fragShaderModule, nullptr);
 
-  return m_pipeline;
+  return Pipeline(pipeline, pipelineLayout);
 }
 
 void Renderer::createFramebuffers() {
@@ -1098,22 +1100,6 @@ void Renderer::createIndexBuffer() {
   vmaDestroyBuffer(m_vmaAllocator, stagingBuffer, stagingAllocation);
 }
 
-void Renderer::createUniformBuffers() {
-  VkDeviceSize bufferSize = sizeof(UniformBufferObject);
-  m_uboBuffer.resize(m_imageCount);
-  m_uboAllocation.resize(m_imageCount);
-  m_uniformBufferMapped.resize(m_imageCount);
-
-  for (size_t i = 0; i < m_imageCount; i++) {
-    createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                 VMA_MEMORY_USAGE_AUTO,
-                 VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                     VMA_ALLOCATION_CREATE_MAPPED_BIT,
-                 m_uboBuffer[i], m_uboAllocation[i]);
-    vmaMapMemory(m_vmaAllocator, m_uboAllocation[i], &m_uniformBufferMapped[i]);
-  }
-}
-
 void Renderer::createBuffer(const VkDeviceSize &size,
                             const VkBufferUsageFlags &usage,
                             const VmaMemoryUsage &memoryUsage,
@@ -1164,6 +1150,15 @@ void Renderer::createCommandBuffer() {
                                m_commandBuffers.data()) != VK_SUCCESS) {
     throw std::runtime_error("failed to allocate command buffers");
   }
+}
+
+void Renderer::createWireframePipeline() {
+
+  // VkVertexInputBindingDescription vertexInputBindingDescriptions;
+  // VkVertexInputAttributeDescription vertexInputAttributeDescriptions;
+  // VkPipeline pipeline = createGraphicPipeline(
+  //     "./shaders/modelShader.vert", "./shaders/modelShader.frag",
+  //     vertexInputBindingDescriptions, vertexInputAttributeDescriptions);
 }
 
 void Renderer::createSyncObjects() {
@@ -1230,7 +1225,7 @@ void Renderer::updateUniformBuffer(const uint32_t &currentImage) {
        objectIndex++) {
 
     UniformBufferObject ubo{};
-    ubo.model = m_pNodeToDraw.at(objectIndex)->m_matrix;
+    ubo.model = m_pNodeToDraw.at(objectIndex)->getMatrix();
     ubo.view =
         glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
                     glm::vec3(0.0f, 0.0f, 1.0f));
@@ -1245,9 +1240,32 @@ void Renderer::updateUniformBuffer(const uint32_t &currentImage) {
         objectIndex;
     memcpy(uboPointer, &ubo, sizeof(UniformBufferObject));
   }
+  for (size_t objectIndex = 0; objectIndex < m_pNodeToDrawWireframe.size();
+       objectIndex++) {
+
+    UniformBufferObject ubo{};
+    ubo.model = m_pNodeToDrawWireframe.at(objectIndex)->getMatrix();
+    ubo.view =
+        glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
+                    glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.projection = glm::perspective(
+        glm::radians(45.0f),
+        swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
+    ubo.projection[1][1] *= -1.0f;
+
+    UniformBufferObject *uboPointer = static_cast<UniformBufferObject *>(
+        m_uniformBufferMapped.at(currentImage));
+    memcpy(uboPointer, &ubo, sizeof(UniformBufferObject));
+
+    ColorUniform *colorPointer = static_cast<ColorUniform *>(
+        m_solidColorUniformBufferMapped.at(currentImage));
+    glm::vec3 color = m_pNodeToDrawWireframe.at(objectIndex)->getColor();
+    memcpy(colorPointer, &color, sizeof(ColorUniform));
+  }
 }
 
 void Renderer::drawFrame() {
+
   vkWaitForFences(m_device, 1, &m_inFlightFences[m_currentFrame], VK_TRUE,
                   UINT64_MAX);
   vkResetFences(m_device, 1, &m_inFlightFences[m_currentFrame]);
@@ -1316,10 +1334,11 @@ void Renderer::drawFrame() {
 
   for (size_t drawbleIndex = 0; drawbleIndex < m_pNodeToDraw.size();
        drawbleIndex++) {
-
-    vkCmdBindPipeline(
-        commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-        m_pNodeToDraw.at(drawbleIndex)->m_drawbles.at(0).m_pipeline);
+    VkPipeline pipeline = m_pNodeToDraw.at(drawbleIndex)
+                              ->m_drawbles.at(0)
+                              .getPipelineTextured()
+                              .getPipeline();
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
     VkBuffer positionBuffer = m_pNodeToDraw.at(drawbleIndex)
                                   ->m_drawbles.at(0)
@@ -1358,16 +1377,18 @@ void Renderer::drawFrame() {
     scissor.extent = swapChainExtent;
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-    uint32_t dynamicOffsets[1];
-    dynamicOffsets[0] = sizeof(UniformBufferObject) * drawbleIndex;
+    VkPipelineLayout pipelineLayout = m_pNodeToDraw.at(drawbleIndex)
+                                          ->m_drawbles.at(0)
+                                          .getPipelineTextured()
+                                          .getPipelineLayout();
 
     vkCmdBindDescriptorSets(
-        commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, 1,
-        &m_uboDescriptorSets.at(m_currentFrame), 1, dynamicOffsets);
+        commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
+        &m_uboDescriptorSets.at(m_currentFrame), 0, nullptr);
 
     if (m_loadedTextures.size() > 0) {
       vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              m_pipelineLayout, 1, 1,
+                              pipelineLayout, 1, 1,
                               &m_loadedTextures
                                    .at(m_pNodeToDraw.at(drawbleIndex)
                                            ->m_drawbles.at(0)
@@ -1387,6 +1408,72 @@ void Renderer::drawFrame() {
     //                      imageMemoryBarrierCount, &imageMemoryBarrier);
   }
 
+  for (size_t drawbleIndex = 0; drawbleIndex < m_pNodeToDrawWireframe.size();
+       drawbleIndex++) {
+
+    VkPipeline pipeline = m_pNodeToDrawWireframe.at(drawbleIndex)
+                              ->m_drawbles.at(0)
+                              .getPipelineSolid()
+                              .getPipeline();
+
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+
+    VkBuffer positionBuffer = m_pNodeToDrawWireframe.at(drawbleIndex)
+                                  ->m_drawbles.at(0)
+                                  .m_bufferData.positionBuffer;
+
+    std::array<VkBuffer, 1> buffers = {positionBuffer};
+    std::array<VkDeviceSize, 1> offsets = {0};
+
+    vkCmdBindVertexBuffers(commandBuffer, 0, buffers.size(), buffers.data(),
+                           offsets.data());
+
+    VkBuffer indexBuffer = m_pNodeToDrawWireframe.at(drawbleIndex)
+                               ->m_drawbles.at(0)
+                               .m_bufferData.indexBuffer;
+
+    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = static_cast<float>(swapChainExtent.width);
+    viewport.height = static_cast<float>(swapChainExtent.height);
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+
+    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = swapChainExtent;
+    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+    VkPipelineLayout pipelineLayout = m_pNodeToDrawWireframe.at(drawbleIndex)
+                                          ->m_drawbles.at(0)
+                                          .getPipelineSolid()
+                                          .getPipelineLayout();
+    std::vector<VkDescriptorSet> descriptorSets = {
+        m_uboDescriptorSets.at(m_currentFrame),
+        m_solidColorDescriptorSets.at(m_currentFrame)};
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            pipelineLayout, 0, descriptorSets.size(),
+                            descriptorSets.data(), 0, nullptr);
+
+    vkCmdDrawIndexed(commandBuffer,
+                     m_pNodeToDrawWireframe
+                         .at(drawbleIndex)
+
+                         ->m_drawbles.at(0)
+                         .m_count,
+                     1, 0, 0, 0);
+
+    // vkCmdPipelineBarrier(commandBuffer, srcPipelineStageflags,
+    //                      dstPipelineStageflags, dependencyFlags,
+    //                      memoryBarrierCount, &memoryBarrier,
+    //                      bufferMemoryBarrierCount, &bufferMemoryBarrier,
+    //                      imageMemoryBarrierCount, &imageMemoryBarrier);
+  }
   ImGui_ImplVulkan_NewFrame();
   ImGui_ImplGlfw_NewFrame();
 
@@ -1466,6 +1553,7 @@ void Renderer::createLogicalDevice() {
 
   VkPhysicalDeviceFeatures physicalDeviceCreateInfo{};
   physicalDeviceCreateInfo.samplerAnisotropy = VK_TRUE;
+  physicalDeviceCreateInfo.fillModeNonSolid = VK_TRUE;
 
   VkDeviceCreateInfo deviceCreateinfo{};
   deviceCreateinfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -1575,6 +1663,8 @@ void Renderer::cleanup() {
 
   vkDestroyDescriptorSetLayout(m_device, m_uboDescriptorSetLayout, nullptr);
   vkDestroyDescriptorSetLayout(m_device, m_textureDescriptorSetLayout, nullptr);
+  vkDestroyDescriptorSetLayout(m_device, m_solidColorDescriptorSetLayout,
+                               nullptr);
 
   vmaDestroyBuffer(m_vmaAllocator, m_indexBuffer, m_indexAllocation);
 
@@ -1662,6 +1752,14 @@ void DestroyDebugUtilsMessengerEXT(
   }
 }
 
+Pipeline::Pipeline(const VkPipeline &pipeline,
+                   const VkPipelineLayout &pipelineLayout) {
+  m_pipeline = pipeline;
+  m_pipelineLayout = pipelineLayout;
+}
+
+VkPipeline Pipeline::getPipeline() { return m_pipeline; }
+VkPipelineLayout Pipeline::getPipelineLayout() { return m_pipelineLayout; }
 RenderObject Renderer::loadModel(const tinygltf::Model &model) {
 
   m_loadedTextures.reserve(model.images.size() + m_loadedTextures.size());
@@ -1759,9 +1857,11 @@ RenderObject Renderer::loadModel(const tinygltf::Model &model) {
   std::vector<VkVertexInputBindingDescription> vertexInputBindingDescriptions;
   std::vector<VkVertexInputAttributeDescription>
       vertexInputAttributeDescriptions;
+  std::vector<VkVertexInputAttributeDescription>
+      onlyPosVertexInputAttributeDescriptions;
   VkIndexType indexType;
 
-  std::vector<Node> nodes;
+  std::vector<std::shared_ptr<Node>> nodes;
   for (auto &node : model.nodes) {
     tinygltf::Mesh mesh = model.meshes.at(node.mesh);
     std::vector<Drawble> drawbles;
@@ -1892,6 +1992,8 @@ RenderObject Renderer::loadModel(const tinygltf::Model &model) {
         vertexInputAttributeDescription.format = VK_FORMAT_R32G32B32_SFLOAT;
         vertexInputAttributeDescription.location = 0;
         vertexInputAttributeDescriptions.push_back(
+            vertexInputAttributeDescription);
+        onlyPosVertexInputAttributeDescriptions.push_back(
             vertexInputAttributeDescription);
       }
       if (primitive.attributes.count("NORMAL") >= 1) {
@@ -2083,14 +2185,31 @@ RenderObject Renderer::loadModel(const tinygltf::Model &model) {
                                  .pbrMetallicRoughness.baseColorTexture.index;
       }
 
-      VkPipeline pipeline = createGraphicPipeline(
-          "./shaders/modelShader.vert", "./shaders/modelShader.frag",
-          vertexInputBindingDescriptions, vertexInputAttributeDescriptions);
+      std::vector<VkDescriptorSetLayout> texturedLayouts = {
+          m_uboDescriptorSetLayout, m_textureDescriptorSetLayout};
+
+      Pipeline pipelineTextured = createGraphicPipeline(
+          "./shaders/" + std::string(TEXTURED_VERTEX_SHADER_NAME),
+          "./shaders/" + std::string(TEXTURED_FRAGMENT_SHADER_NAME),
+          vertexInputBindingDescriptions, vertexInputAttributeDescriptions,
+          VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, texturedLayouts);
+
+      std::vector<VkDescriptorSetLayout> solidColorLayouts = {
+          m_uboDescriptorSetLayout, m_solidColorDescriptorSetLayout};
+
+      Pipeline pipelineSolid = createGraphicPipeline(
+          "./shaders/" + std::string(SOLID_VERTEX_SHADER_NAME),
+          "./shaders/" + std::string(SOLID_FRAGMENT_SHADER_NAME),
+          vertexInputBindingDescriptions,
+          onlyPosVertexInputAttributeDescriptions, VK_POLYGON_MODE_LINE,
+          VK_CULL_MODE_NONE, solidColorLayouts);
+
       const uint32_t nextIndexToDescriptor = drawbles.size();
 
-      drawbles.push_back(Drawble(
-          bufferData, pipeline, outputIndexOffset, outputCount, indexType,
-          newTextureIndex + outputIndexTexture, nextIndexToDescriptor));
+      drawbles.push_back(Drawble(bufferData, pipelineTextured, pipelineSolid,
+                                 outputIndexOffset, outputCount, indexType,
+                                 newTextureIndex + outputIndexTexture,
+                                 nextIndexToDescriptor));
     }
     glm::mat4 initialMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f),
                                           glm::vec3(1.0f, 0.0f, 0.0f));
@@ -2104,20 +2223,23 @@ RenderObject Renderer::loadModel(const tinygltf::Model &model) {
     } else if (node.matrix.size() != 0) {
     }
 
-    nodes.push_back(Node(node.name, drawbles, initialMatrix));
+    nodes.push_back(std::make_shared<Node>(node.name, drawbles, initialMatrix));
   }
   return RenderObject(nodes, model);
 }
 
-Drawble::Drawble(const BufferData &bufferData, const VkPipeline &pipeline,
-                 const uint32_t indexOffset, const uint32_t count,
-                 const VkIndexType &indexType, const uint32_t &indexToTexture,
+Drawble::Drawble(const BufferData &bufferData, const Pipeline &pipelineTextured,
+                 const Pipeline &pipelineSolid, const uint32_t indexOffset,
+                 const uint32_t count, const VkIndexType &indexType,
+                 const uint32_t &indexToTexture,
                  const uint32_t &indexToDescriptor)
-    : m_bufferData(bufferData), m_pipeline(pipeline),
-      m_indexOffset(indexOffset), m_count(count), m_indexType(indexType),
-      m_indexToTexture(indexToTexture), m_indexToDescriptor(indexToDescriptor) {
-}
+    : m_bufferData(bufferData), m_pipelineTextured(pipelineTextured),
+      m_pipelineSolid(pipelineSolid), m_indexOffset(indexOffset),
+      m_count(count), m_indexType(indexType), m_indexToTexture(indexToTexture),
+      m_indexToDescriptor(indexToDescriptor) {}
 
+Pipeline Drawble::getPipelineSolid() { return m_pipelineSolid; }
+Pipeline Drawble::getPipelineTextured() { return m_pipelineTextured; }
 Texture::Texture(const VkImage &image, const VkImageView &imageView,
                  const VmaAllocation &allocation, const VkSampler &sampler,
                  const std::vector<VkDescriptorSet> &descriptorSet)
@@ -2158,7 +2280,7 @@ void Renderer::createDescriptorSetLayouts() {
   {
     VkDescriptorSetLayoutBinding binding{};
     binding.binding = 0;
-    binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     binding.descriptorCount = 1;
     binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
@@ -2187,15 +2309,31 @@ void Renderer::createDescriptorSetLayouts() {
     vkCreateDescriptorSetLayout(m_device, &layoutCreateInfo, nullptr,
                                 &m_textureDescriptorSetLayout);
   }
+  {
+    VkDescriptorSetLayoutBinding binding{};
+    binding.binding = 0;
+    binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    binding.descriptorCount = 1;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+
+    VkDescriptorSetLayoutCreateInfo layoutCreateInfo{};
+    layoutCreateInfo.sType =
+        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutCreateInfo.pBindings = &binding;
+    layoutCreateInfo.bindingCount = 1;
+
+    vkCreateDescriptorSetLayout(m_device, &layoutCreateInfo, nullptr,
+                                &m_solidColorDescriptorSetLayout);
+  }
 }
 
 void Renderer::createDescriptorPool() {
   std::array<VkDescriptorPoolSize, 2> poolSizes{};
-  poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-  poolSizes[0].descriptorCount = static_cast<uint32_t>(m_imageCount);
+  poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  poolSizes[0].descriptorCount = static_cast<uint32_t>(m_imageCount * 20);
 
   poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  poolSizes[1].descriptorCount = static_cast<uint32_t>(m_imageCount) * 100;
+  poolSizes[1].descriptorCount = static_cast<uint32_t>(m_imageCount * 10);
 
   VkDescriptorPoolCreateInfo descriptorPoolCreateInfo{};
   descriptorPoolCreateInfo.sType =
@@ -2203,7 +2341,7 @@ void Renderer::createDescriptorPool() {
   descriptorPoolCreateInfo.poolSizeCount =
       static_cast<uint32_t>(poolSizes.size());
   descriptorPoolCreateInfo.pPoolSizes = poolSizes.data();
-  descriptorPoolCreateInfo.maxSets = static_cast<uint32_t>(m_imageCount) * 90;
+  descriptorPoolCreateInfo.maxSets = static_cast<uint32_t>(m_imageCount * 30);
 
   if (vkCreateDescriptorPool(m_device, &descriptorPoolCreateInfo, nullptr,
                              &m_firstDescriptorPool) != VK_SUCCESS) {
@@ -2214,10 +2352,16 @@ void Renderer::createDescriptorPool() {
 void Renderer::allocateUboDescriptorSets() {
 
   m_uboDescriptorSets.resize(m_imageCount);
-  std::vector<VkWriteDescriptorSet> writes(m_imageCount);
+  std::vector<VkWriteDescriptorSet> uboWrites(m_imageCount);
   m_uboBuffer.resize(m_imageCount);
   m_uboAllocation.resize(m_imageCount);
   m_uniformBufferMapped.resize(m_imageCount);
+
+  std::vector<VkWriteDescriptorSet> colorUniformWrite(m_imageCount);
+  m_solidColorUniformBuffer.resize(m_imageCount);
+  m_solidColorUniformAllocation.resize(m_imageCount);
+  m_solidColorUniformBufferMapped.resize(m_imageCount);
+  m_solidColorDescriptorSets.resize(m_imageCount);
   for (size_t frameIndex = 0; frameIndex < m_imageCount; frameIndex++) {
 
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo{};
@@ -2232,35 +2376,82 @@ void Renderer::allocateUboDescriptorSets() {
         VK_SUCCESS) {
       throw std::runtime_error("Error allocating ubo descriptor set");
     }
-    VkDeviceSize bufferSize = sizeof(UniformBufferObject) * 70;
+    VkDeviceSize uboBufferSize = sizeof(UniformBufferObject);
 
-    createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+    createBuffer(uboBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                  VMA_MEMORY_USAGE_AUTO,
                  VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
                      VMA_ALLOCATION_CREATE_MAPPED_BIT,
                  m_uboBuffer.at(frameIndex), m_uboAllocation.at(frameIndex));
+
     if (vmaMapMemory(m_vmaAllocator, m_uboAllocation.at(frameIndex),
                      &m_uniformBufferMapped.at(frameIndex)) != VK_SUCCESS) {
       throw std::runtime_error(
           "Error mapping uniform buffer on start allocation!");
     }
-    VkDescriptorBufferInfo descriptorBufferInfo{};
-    descriptorBufferInfo.buffer = m_uboBuffer.at(frameIndex);
-    descriptorBufferInfo.offset = 0;
-    descriptorBufferInfo.range = sizeof(UniformBufferObject);
+    VkDescriptorBufferInfo uboDescriptorBufferInfo{};
+    uboDescriptorBufferInfo.buffer = m_uboBuffer.at(frameIndex);
+    uboDescriptorBufferInfo.offset = 0;
+    uboDescriptorBufferInfo.range = uboBufferSize;
 
     VkWriteDescriptorSet uboWriteDescriptor{};
     uboWriteDescriptor.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     uboWriteDescriptor.dstSet = m_uboDescriptorSets.at(frameIndex);
     uboWriteDescriptor.dstBinding = 0;
     uboWriteDescriptor.dstArrayElement = 0;
-    uboWriteDescriptor.descriptorType =
-        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+    uboWriteDescriptor.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uboWriteDescriptor.descriptorCount = 1;
-    uboWriteDescriptor.pBufferInfo = &descriptorBufferInfo;
-    writes.at(frameIndex) = uboWriteDescriptor;
+    uboWriteDescriptor.pBufferInfo = &uboDescriptorBufferInfo;
+    vkUpdateDescriptorSets(m_device, 1, &uboWriteDescriptor, 0, nullptr);
   }
-  vkUpdateDescriptorSets(m_device, writes.size(), writes.data(), 0, nullptr);
+  for (size_t frameIndex = 0; frameIndex < m_imageCount; frameIndex++) {
+
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo{};
+    descriptorSetAllocateInfo.sType =
+        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    descriptorSetAllocateInfo.descriptorPool = m_firstDescriptorPool;
+    descriptorSetAllocateInfo.descriptorSetCount = 1;
+    descriptorSetAllocateInfo.pSetLayouts = &m_solidColorDescriptorSetLayout;
+
+    if (vkAllocateDescriptorSets(m_device, &descriptorSetAllocateInfo,
+                                 &m_solidColorDescriptorSets.at(frameIndex)) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("Error allocating ubo descriptor set");
+    }
+    VkDeviceSize colorBufferSize = sizeof(ColorUniform);
+
+    createBuffer(colorBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                 VMA_MEMORY_USAGE_AUTO,
+                 VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                     VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                 m_solidColorUniformBuffer.at(frameIndex),
+                 m_solidColorUniformAllocation.at(frameIndex));
+
+    if (vmaMapMemory(
+            m_vmaAllocator, m_solidColorUniformAllocation.at(frameIndex),
+            &m_solidColorUniformBufferMapped.at(frameIndex)) != VK_SUCCESS) {
+      throw std::runtime_error(
+          "Error mapping uniform buffer on start allocation!");
+    }
+
+    VkDescriptorBufferInfo colorDescriptorBufferInfo{};
+    colorDescriptorBufferInfo.buffer = m_solidColorUniformBuffer.at(frameIndex);
+    colorDescriptorBufferInfo.offset = 0;
+    colorDescriptorBufferInfo.range = colorBufferSize;
+
+    VkWriteDescriptorSet colorUniformWriteDescriptor{};
+    colorUniformWriteDescriptor.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    colorUniformWriteDescriptor.dstSet =
+        m_solidColorDescriptorSets.at(frameIndex);
+    colorUniformWriteDescriptor.dstBinding = 0;
+    colorUniformWriteDescriptor.dstArrayElement = 0;
+    colorUniformWriteDescriptor.descriptorType =
+        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    colorUniformWriteDescriptor.descriptorCount = 1;
+    colorUniformWriteDescriptor.pBufferInfo = &colorDescriptorBufferInfo;
+    vkUpdateDescriptorSets(m_device, 1, &colorUniformWriteDescriptor, 0,
+                           nullptr);
+  }
 }
 
 std::vector<VkDescriptorSet>
@@ -2305,27 +2496,45 @@ void Renderer::setMatrix(const uint32_t &index, const glm::mat4 &matrix) {
   m_modelMatrices.at(index) = matrix;
 }
 
-RenderObject::RenderObject(const std::vector<Node> &nodes,
+RenderObject::RenderObject(const std::vector<std::shared_ptr<Node>> &nodes,
                            const tinygltf::Model &model)
     : m_nodes(nodes), m_model(model) {}
 void RenderObject::setMatrix(const glm::mat4 &matrix, const uint32_t index) {
-  m_nodes.at(0).setMatrix(matrix);
+  m_nodes.at(0)->setMatrix(matrix);
 }
 
-glm::mat4 Node::getInitialMatrix() const { return m_matrix; }
+glm::mat4 Node::getMatrix() const { return m_matrix; }
 
 void Renderer::draw(RenderObject *const renderObject) {
   for (auto &node : renderObject->m_nodes) {
-    m_pNodeToDraw.push_back(&node);
+    m_pNodeToDraw.push_back(node);
   }
 }
+std::string Node::getName() const { return m_name; }
 
+void Renderer::drawAsWireframe(RenderObject *const renderObject,
+                               const glm::vec3 &color) {
+  for (auto &node : renderObject->m_nodes) {
+    m_pNodeToDrawWireframe.push_back(
+        std::make_shared<ColoredNode>(node, color));
+  }
+}
 void Renderer::drawLabel(const std::string *label) {
   m_guiLabels.push_back(label);
 }
 
 void Node::setMatrix(const glm::mat4 &matrix) { m_matrix = matrix; }
 
+void Node::setName(const std::string &name) { m_name = name; }
+
+std::vector<Drawble> Node::getDrawbles() const { return m_drawbles; }
+
+ColoredNode::ColoredNode(const std::shared_ptr<Node> &node,
+                         const glm::vec3 &color)
+    : Node(node->getName(), node->getDrawbles(), node->getMatrix()) {
+  m_color = color;
+}
+glm::vec3 ColoredNode::getColor() const { return m_color; }
 void Renderer::endFrame() {
   drawFrame();
   m_pNodeToDraw.clear();

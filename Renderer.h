@@ -1,7 +1,7 @@
 #pragma once
-#include "stb_image.h"
 #include "glm/fwd.hpp"
 #include "imgui_impl_vulkan.h"
+#include "stb_image.h"
 #include "tiny_gltf.h"
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
@@ -11,6 +11,7 @@
 #include <glm/glm.hpp>
 #include <vk_mem_alloc.h>
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -27,6 +28,10 @@ struct UniformBufferObject {
   glm::mat4 model;
   glm::mat4 view;
   glm::mat4 projection;
+};
+
+struct ColorUniform {
+  glm::vec3 color;
 };
 
 struct Vertex {
@@ -83,18 +88,37 @@ private:
   const std::vector<VkDescriptorSet> m_descriptorSet;
 };
 
+class Pipeline {
+public:
+  Pipeline() = default;
+  Pipeline(const Pipeline &pipeline) = default;
+  Pipeline(const VkPipeline &pipeline, const VkPipelineLayout &pipelineLayout);
+  ~Pipeline() = default;
+
+  VkPipeline getPipeline();
+  VkPipelineLayout getPipelineLayout();
+
+private:
+  VkPipeline m_pipeline;
+  VkPipelineLayout m_pipelineLayout;
+};
+
 class Drawble {
 public:
   friend class Renderer;
   Drawble() = delete;
-  Drawble(const BufferData &bufferData, const VkPipeline &pipeline,
-          const uint32_t indexOffset, const uint32_t count,
-          const VkIndexType &indexType, const uint32_t &indexToTexture,
-          const uint32_t &indexToDescriptor);
+  Drawble(const BufferData &bufferData, const Pipeline &pipelineTextured,
+          const Pipeline &pipelineSolid, const uint32_t indexOffset,
+          const uint32_t count, const VkIndexType &indexType,
+          const uint32_t &indexToTexture, const uint32_t &indexToDescriptor);
+
+  Pipeline getPipelineSolid();
+  Pipeline getPipelineTextured();
 
 private:
   const BufferData m_bufferData;
-  const VkPipeline m_pipeline;
+  const Pipeline m_pipelineTextured;
+  const Pipeline m_pipelineSolid;
   const uint32_t m_indexOffset;
   const uint32_t m_count;
   const VkIndexType m_indexType;
@@ -105,16 +129,30 @@ private:
 class Node {
 public:
   friend class Renderer;
-  Node() = delete;
   Node(const std::string &name, const std::vector<Drawble> &drawbles,
        const glm::mat4 &initialMatrix);
-  glm::mat4 getInitialMatrix() const;
+  virtual ~Node() = default;
+  glm::mat4 getMatrix() const;
+  std::string getName() const;
   void setMatrix(const glm::mat4 &matrix);
+  void setName(const std::string &name);
+  std::vector<Drawble> getDrawbles() const;
 
 private:
   glm::mat4 m_matrix;
-  const std::string m_name;
-  const std::vector<Drawble> m_drawbles;
+  std::string m_name;
+  std::vector<Drawble> m_drawbles;
+};
+
+class ColoredNode : public Node {
+public:
+  ColoredNode(const std::shared_ptr<Node> &node, const glm::vec3 &color);
+  virtual ~ColoredNode() = default;
+
+  glm::vec3 getColor() const;
+
+private:
+  glm::vec3 m_color;
 };
 
 const std::vector<Vertex> vertices = {
@@ -160,6 +198,8 @@ public:
   RenderObject loadModel(const tinygltf::Model &model);
   bool shouldExit();
   void draw(RenderObject *const fmrenderObject);
+  void drawAsWireframe(RenderObject *const fmrenderObject,
+                       const glm::vec3 &color);
   void drawLabel(const std::string *label);
   void endFrame();
   void destroy();
@@ -225,6 +265,7 @@ private:
   void allocateUboDescriptorSets();
   void createIndexBuffer();
   void createCommandBuffer();
+  void createWireframePipeline();
   void createSyncObjects();
 
   void initImGui();
@@ -240,13 +281,16 @@ private:
                 const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
                 void *pUserData);
 
-  VkPipeline
-  createGraphicPipeline(const std::string &vertexShaderPath,
-                        const std::string &fragmentShaderPath,
-                        const std::vector<VkVertexInputBindingDescription>
-                            &vertexInpitBindingDescription,
-                        const std::vector<VkVertexInputAttributeDescription>
-                            &vertexInputAttributeDescription);
+  Pipeline createGraphicPipeline(
+      const std::string &vertexShaderPath,
+      const std::string &fragmentShaderPath,
+      const std::vector<VkVertexInputBindingDescription>
+          &vertexInputBindingDescriptions,
+      const std::vector<VkVertexInputAttributeDescription>
+          &vertexInputAttributeDescriptions,
+      const VkPolygonMode &polygonMode, const VkCullModeFlags &cullMode,
+      const std::vector<VkDescriptorSetLayout> &pipelineLayouts);
+
   VkShaderModule createShaderModule(const std::vector<char> &code);
 
   std::vector<VkDescriptorSet>
@@ -301,7 +345,9 @@ private:
   VkDescriptorPool m_firstDescriptorPool;
   VkDescriptorSetLayout m_uboDescriptorSetLayout;
   VkDescriptorSetLayout m_textureDescriptorSetLayout;
+  VkDescriptorSetLayout m_solidColorDescriptorSetLayout;
   std::vector<VkDescriptorSet> m_uboDescriptorSets;
+  std::vector<VkDescriptorSet> m_solidColorDescriptorSets;
   VkBuffer m_indexBuffer;
   std::vector<VkCommandBuffer> m_commandBuffers;
   std::vector<VkSemaphore> m_imageAvailableSemaphores;
@@ -332,27 +378,32 @@ private:
   std::vector<VkBuffer> m_uboBuffer;
   std::vector<VmaAllocation> m_uboAllocation;
   std::vector<void *> m_uniformBufferMapped;
-  void createUniformBuffers();
+
+  std::vector<VkBuffer> m_solidColorUniformBuffer;
+  std::vector<VmaAllocation> m_solidColorUniformAllocation;
+  std::vector<void *> m_solidColorUniformBufferMapped;
   uint32_t findMemoryType(const uint32_t &typeFilter,
                           const VkMemoryPropertyFlags &properties);
   ImGui_ImplVulkanH_Window m_imguiWindow;
   std::vector<BufferData> m_loadedBufferData;
 
   std::vector<glm::mat4> m_modelMatrices;
-  std::vector<Node *> m_pNodeToDraw;
+  std::vector<std::shared_ptr<Node>> m_pNodeToDraw;
+  std::vector<std::shared_ptr<ColoredNode>> m_pNodeToDrawWireframe;
 };
 
 class RenderObject {
 public:
   friend class Renderer;
   RenderObject() = delete;
-  RenderObject(const std::vector<Node> &nodes, const tinygltf::Model &model);
+  RenderObject(const std::vector<std::shared_ptr<Node>> &nodes,
+               const tinygltf::Model &model);
   void setMatrix(const glm::mat4 &matrix, const uint32_t index);
   RenderObject(const RenderObject &other) = default;
   glm::vec3 getCenterOfMass(const bool &verbose) const;
   glm::mat4 getInertiaTensor(const bool &verbose) const;
 
 private:
-  std::vector<Node> m_nodes;
+  std::vector<std::shared_ptr<Node>> m_nodes;
   tinygltf::Model m_model;
 };
