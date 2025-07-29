@@ -1,15 +1,24 @@
 #include "utils.h"
+#include "glm/common.hpp"
+#include "glm/ext/scalar_common.hpp"
+#include "glm/ext/vector_common.hpp"
 #include "glm/fwd.hpp"
 #include "glm/geometric.hpp"
 #include "glm/gtc/type_ptr.hpp"
+#include <algorithm>
 #include <cassert>
+#include <cstring>
 #include <fstream>
 #include <iostream>
+#include <limits>
+#include <memory>
 #include <span>
+#include <unordered_set>
 #define TINYGLTF_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "tiny_gltf.h"
+#include <span>
 
 std::vector<char> readFile(const std::string &filename) {
   std::ifstream file(filename, std::ios::ate | std::ios::binary);
@@ -223,35 +232,122 @@ const glm::vec3 getCenterOfMass(const std::span<const glm::vec3> &vertices,
   }
 }
 
-const glm::mat3 getInertiaTensor(const std::span<const glm::vec3> &vertices,
-                                 const IndexDataSpan &dataSpan,
+const glm::mat3 getInertiaTensor(const std::vector<glm::vec3> &vertices,
+                                 const std::vector<size_t> &indices,
                                  const bool &verbose) {
 
-  switch (dataSpan.getBytesPerInt()) {
-  case 1: {
-    return getInertiaTensor<const uint8_t>(vertices, dataSpan.getIndexSpan(),
-                                           verbose);
-  } break;
-  case 2: {
-    const uint16_t *intPtr =
-        reinterpret_cast<const uint16_t *>(dataSpan.getIndexSpan().data());
-    size_t numberOfIndices =
-        dataSpan.getIndexSpan().size() / dataSpan.getBytesPerInt();
-    std::span<const uint16_t> span16(intPtr, numberOfIndices);
-    return getInertiaTensor<const uint16_t>(vertices, span16, verbose);
-    break;
+
+  glm::mat3 acumulatedInertialTensor = glm::mat3(0.0f);
+
+  uint32_t numsOfTetrahedrons = 0;
+  for (size_t vertexIndex = 0; vertexIndex < indices.size(); vertexIndex += 3) {
+
+    glm::vec3 vertex1 = glm::vec3(0.0f);
+    glm::vec3 vertex2 = vertices[indices[vertexIndex]];
+    glm::vec3 vertex3 = vertices[indices[vertexIndex + 1]];
+    glm::vec3 vertex4 = vertices[indices[vertexIndex + 2]];
+
+    glm::mat3 jacobian = glm::mat3(vertex2, vertex3, vertex4);
+    float det = glm::determinant(jacobian);
+
+    if (verbose) {
+      std::cout << "First Vertex: " << std::endl;
+      std::cout << vertex2.x << "\t" << vertex2.y << "\t" << vertex2.z
+                << std::endl;
+      std::cout << "Second Vertex: " << std::endl;
+      std::cout << vertex3.x << "\t" << vertex3.y << "\t" << vertex3.z
+                << std::endl;
+      std::cout << "Third Vertex: " << std::endl;
+      std::cout << vertex4.x << "\t" << vertex4.y << "\t" << vertex4.z
+                << std::endl;
+
+      std::cout << "Jacobian:" << std::endl;
+      std::cout << jacobian[0][0] << "\t" << jacobian[0][1] << "\t"
+                << jacobian[0][2] << "\t" << std::endl;
+
+      std::cout << jacobian[1][0] << "\t" << jacobian[1][1] << "\t"
+                << jacobian[1][2] << "\t" << std::endl;
+
+      std::cout << jacobian[2][0] << "\t" << jacobian[2][1] << "\t"
+                << jacobian[2][2] << "\t" << std::endl;
+      std::cout << "Determinant of the jacobian : " << det << std::endl;
+    }
+
+    float abcx = vertex1.x * vertex1.x + vertex1.x * vertex2.x +
+                 vertex2.x * vertex2.x + vertex1.x * vertex3.x +
+                 vertex2.x * vertex3.x + vertex3.x * vertex3.x +
+                 vertex1.x * vertex4.x + vertex2.x * vertex4.x +
+                 vertex3.x * vertex4.x + vertex4.x * vertex4.x;
+
+    float abcy = vertex1.y * vertex1.y + vertex1.y * vertex2.y +
+                 vertex2.y * vertex2.y + vertex1.y * vertex3.y +
+                 vertex2.y * vertex3.y + vertex3.y * vertex3.y +
+                 vertex1.y * vertex4.y + vertex2.y * vertex4.y +
+                 vertex3.y * vertex4.y + vertex4.y * vertex4.y;
+
+    float abcz = vertex1.z * vertex1.z + vertex1.z * vertex2.z +
+                 vertex2.z * vertex2.z + vertex1.z * vertex3.z +
+                 vertex2.z * vertex3.z + vertex3.z * vertex3.z +
+                 vertex1.z * vertex4.z + vertex2.z * vertex4.z +
+                 vertex3.z * vertex4.z + vertex4.z * vertex4.z;
+    float a = (det * (abcy + abcz) / 60.0f) / (det / 6.0);
+    float b = (det * (abcx + abcz) / 60.0f) / (det / 6.0);
+    float c = (det * (abcx + abcy) / 60.0f) / (det / 6.0);
+
+    float abcxp =
+        vertex2.y * vertex1.z + vertex3.y * vertex1.z + vertex4.y * vertex1.z +
+        vertex1.y * vertex2.z + vertex3.y * vertex2.z + vertex4.y * vertex2.z +
+        vertex1.y * vertex3.z + vertex2.y * vertex3.z + vertex4.y * vertex3.z +
+        vertex1.y * vertex4.z + vertex2.y * vertex4.z + vertex3.y * vertex4.z +
+        2.0f * vertex1.y * vertex1.z + 2.0f * vertex2.y * vertex2.z +
+        2.0f * vertex3.y * vertex3.z + 2.0f * vertex4.y * vertex4.z;
+
+    float abcyp =
+        vertex2.x * vertex1.z + vertex3.x * vertex1.z + vertex4.x * vertex1.z +
+        vertex1.x * vertex2.z + vertex3.x * vertex2.z + vertex4.x * vertex2.z +
+        vertex1.x * vertex3.z + vertex2.x * vertex3.z + vertex4.x * vertex3.z +
+        vertex1.x * vertex4.z + vertex2.x * vertex4.z + vertex3.x * vertex4.z +
+        2.0f * vertex1.x * vertex1.z + 2.0f * vertex2.x * vertex2.z +
+        2.0f * vertex3.x * vertex3.z + 2.0f * vertex4.x * vertex4.z;
+
+    float abczp =
+        vertex2.x * vertex1.y + vertex3.x * vertex1.y + vertex4.x * vertex1.y +
+        vertex1.x * vertex2.y + vertex3.x * vertex2.y + vertex4.x * vertex2.y +
+        vertex1.x * vertex3.y + vertex2.x * vertex3.y + vertex4.x * vertex3.y +
+        vertex1.x * vertex4.y + vertex2.x * vertex4.y + vertex3.x * vertex4.y +
+        2.0f * vertex1.x * vertex1.y + 2.0f * vertex2.x * vertex2.y +
+        2.0f * vertex3.x * vertex3.y + 2.0f * vertex4.x * vertex4.y;
+
+    float ap = (det * abcxp / 120.0f) / (det / 6.0);
+    float bp = (det * abcyp / 120.0f) / (det / 6.0);
+    float cp = (det * abczp / 120.0f) / (det / 6.0);
+
+    float tetrahedronInertiaTensorArray[] = {a,   -bp, -cp, -bp, b,
+                                             -ap, -cp, -ap, c};
+    glm::mat3 tetrahedronInertiaTensor =
+        glm::make_mat3(tetrahedronInertiaTensorArray);
+    if (verbose) {
+
+      std::cout << "Acumulated tetrahedron inertial tensor:" << std::endl;
+      std::cout << tetrahedronInertiaTensor[0][0] << "\t"
+                << tetrahedronInertiaTensor[0][1] << "\t"
+                << tetrahedronInertiaTensor[0][2] << "\t" << std::endl;
+
+      std::cout << tetrahedronInertiaTensor[1][0] << "\t"
+                << tetrahedronInertiaTensor[1][1] << "\t"
+                << tetrahedronInertiaTensor[1][2] << "\t" << std::endl;
+
+      std::cout << tetrahedronInertiaTensor[2][0] << "\t"
+                << tetrahedronInertiaTensor[2][1] << "\t"
+                << tetrahedronInertiaTensor[2][2] << "\t" << std::endl;
+    }
+    acumulatedInertialTensor += tetrahedronInertiaTensor;
+    numsOfTetrahedrons++;
+    if (verbose)
+      std::cout << "Number of tetrahedrons: " << numsOfTetrahedrons
+                << std::endl;
   }
-  case 3: {
-    const uint32_t *intPtr =
-        reinterpret_cast<const uint32_t *>(dataSpan.getIndexSpan().data());
-    auto numberOfIndices =
-        dataSpan.getIndexSpan().size() / dataSpan.getBytesPerInt();
-    std::span<const uint32_t> span32(intPtr, intPtr + numberOfIndices);
-    return getInertiaTensor<const uint32_t>(vertices, span32, verbose);
-  } break;
-  default:
-    assert(false);
-  }
+  return acumulatedInertialTensor / static_cast<float>(numsOfTetrahedrons);
 }
 
 template <typename T>
@@ -483,3 +579,433 @@ doCollideTriangleMeshBased(const std::span<const glm::vec3> vertices1,
   }
   return true;
 }
+
+const Triangle &Triangle::operator=(const Triangle &triangle) {
+  return triangle;
+}
+Triangle::Triangle(const glm::vec3 &vertex1, const glm::vec3 &vertex2,
+                   const glm::vec3 &vertex3)
+    : m_vertex1(vertex1), m_vertex2(vertex2), m_vertex3(vertex3) {}
+
+Triangle Triangle::getOpositeHandednesTriangle() const {
+
+  return Triangle(m_vertex2, m_vertex1, m_vertex3);
+}
+bool Triangle::isTowards(const glm::vec3 &point, const float &elipson) const {
+  const glm::vec3 triangleEdge1 = m_vertex2 - m_vertex1;
+  const glm::vec3 triangleEdge2 = m_vertex3 - m_vertex1;
+  const glm::vec3 normal = glm::cross(triangleEdge1, triangleEdge2);
+  const float dotProduct = glm::dot(normal, point - m_vertex1);
+  return dotProduct > 0.0f;
+}
+
+const Tetrahedron &Tetrahedron::operator=(const Tetrahedron &tetrahedron) {
+  return tetrahedron;
+}
+Tetrahedron::Tetrahedron(const std::vector<Triangle> &triangles)
+    : m_triangles(triangles) {
+  assert(triangles.size() == 4);
+}
+
+Tetrahedron::Tetrahedron(const Triangle &triangle, const glm::vec3 &point)
+    : m_triangles(triangle.getTetrahedron(point).getTriangles()) {}
+
+const std::vector<Triangle> Tetrahedron::getTriangles() const {
+  return m_triangles;
+}
+TriangleGraph Tetrahedron::getTriangleGraph() {
+
+  std::shared_ptr<Triangle> trianglePtr1 =
+      std::make_shared<Triangle>(m_triangles.at(0));
+  std::shared_ptr<Triangle> trianglePtr2 =
+      std::make_shared<Triangle>(m_triangles.at(1));
+  std::shared_ptr<Triangle> trianglePtr3 =
+      std::make_shared<Triangle>(m_triangles.at(2));
+  std::shared_ptr<Triangle> trianglePtr4 =
+      std::make_shared<Triangle>(m_triangles.at(3));
+  std::shared_ptr<TriangleGraph::Node> nodePtr1;
+  std::shared_ptr<TriangleGraph::Node> nodePtr2;
+  std::shared_ptr<TriangleGraph::Node> nodePtr3;
+  std::shared_ptr<TriangleGraph::Node> nodePtr4;
+  nodePtr1 = std::make_shared<TriangleGraph::Node>(
+      trianglePtr1, std::vector<std::shared_ptr<TriangleGraph::Node>>(
+                        {nodePtr2, nodePtr3, nodePtr4}));
+  nodePtr2 = std::make_shared<TriangleGraph::Node>(
+      trianglePtr2, std::vector<std::shared_ptr<TriangleGraph::Node>>(
+                        {nodePtr1, nodePtr3, nodePtr4}));
+  nodePtr3 = std::make_shared<TriangleGraph::Node>(
+      trianglePtr3, std::vector<std::shared_ptr<TriangleGraph::Node>>(
+                        {nodePtr1, nodePtr2, nodePtr4}));
+  nodePtr4 = std::make_shared<TriangleGraph::Node>(
+      trianglePtr4, std::vector<std::shared_ptr<TriangleGraph::Node>>(
+                        {nodePtr1, nodePtr2, nodePtr3}));
+
+  return TriangleGraph({nodePtr1, nodePtr2, nodePtr3, nodePtr4});
+}
+Tetrahedron Triangle::getTetrahedron(const glm::vec3 &point) const {
+
+  glm::vec3 vectorMax = glm::max(glm::abs(getVectorWiseMax()), glm::abs(point));
+  float elipson = 3.0f * (vectorMax.x + vectorMax.y + vectorMax.z) +
+                  std::numeric_limits<float>::epsilon();
+  const Triangle correctHandenesTriangle =
+      isTowards(point, elipson) ? getOpositeHandednesTriangle() : *this;
+  const Triangle triangle1({correctHandenesTriangle.getVertices().at(2),
+                            correctHandenesTriangle.getVertices().at(1),
+                            point});
+  const Triangle triangle2({correctHandenesTriangle.getVertices().at(1),
+                            correctHandenesTriangle.getVertices().at(0),
+                            point});
+  const Triangle triangle3({correctHandenesTriangle.getVertices().at(0),
+                            correctHandenesTriangle.getVertices().at(2),
+                            point});
+
+  return Tetrahedron(
+      {triangle1, triangle2, triangle3, correctHandenesTriangle});
+}
+
+float Triangle::getDistanceToPointFromPlane(const glm::vec3 &point) const {
+  const glm::vec3 edge1 = m_vertex2 - m_vertex1;
+  const glm::vec3 edge2 = m_vertex3 - m_vertex1;
+  const glm::vec3 crossVector = glm::cross(edge1, edge2);
+  const glm::vec3 normal = glm::normalize(crossVector);
+  return glm::dot(normal - m_vertex1, point - m_vertex1);
+}
+std::vector<glm::vec3>
+Triangle::getAllPointTowards(const std::vector<glm::vec3> &points) const {
+  std::vector<glm::vec3> overPoints;
+
+  for (const glm::vec3 &point : points) {
+    if (isTowards(point)) {
+      overPoints.push_back(point);
+    }
+  }
+  return overPoints;
+}
+std::optional<glm::vec3>
+Triangle::getFurthestPointTowards(const std::vector<glm::vec3> &points) const {
+  std::optional<glm::vec3> furthest;
+  for (const glm::vec3 &point : points) {
+    float distanceFromPoint = getDistanceToPointFromPlane(point);
+    if (distanceFromPoint > 0.0) {
+      furthest = point;
+    }
+    if (furthest.has_value()) {
+      if (getDistanceToPointFromPlane(point) >
+          getDistanceToPointFromPlane(furthest.value())) {
+        furthest = point;
+      }
+    }
+  }
+  return furthest;
+}
+
+std::array<glm::vec3, 3> Triangle::getVertices() const {
+  return {m_vertex1, m_vertex2, m_vertex3};
+}
+glm::vec3 Triangle::getNormal() const {
+  const glm::vec3 edge1 = m_vertex2 - m_vertex1;
+  const glm::vec3 edge2 = m_vertex3 - m_vertex1;
+  return glm::cross(edge1, edge2);
+}
+
+std::array<glm::vec3, 2> Triangle::getEdge(const EdgeId &edgeId) {
+  switch (edgeId) {
+  case EdgeId::FIRST:
+    return {m_vertex1, m_vertex2};
+    break;
+  case EdgeId::SECOND:
+    return {m_vertex2, m_vertex3};
+    break;
+  case EdgeId::THIRD:
+    return {m_vertex3, m_vertex1};
+    break;
+  }
+}
+float Triangle::getVerticesElipson() const {
+  glm::vec3 maxVectorWise = glm::max(m_vertex1, m_vertex2);
+  maxVectorWise = glm::max(maxVectorWise, m_vertex3);
+  return 2.0f *
+         (glm::abs(maxVectorWise.x) + glm::abs(maxVectorWise.y) +
+          glm::abs(maxVectorWise.z)) *
+         std::numeric_limits<float>::epsilon();
+}
+
+glm::vec3 Triangle::getVectorWiseMax() const {
+  glm::vec3 maxVec = glm::max(m_vertex1, m_vertex2);
+  return glm::max(maxVec, m_vertex3);
+}
+const TriangleGraph::Node &
+TriangleGraph::Node::operator=(const TriangleGraph::Node &node) {
+  m_triangle = node.m_triangle;
+  m_adjacencyList = node.m_adjacencyList;
+  return node;
+}
+TriangleGraph::Node::Node(
+    const std::shared_ptr<Triangle> &triangle,
+    const std::vector<std::shared_ptr<TriangleGraph::Node>> &adjacencyList)
+    : m_triangle(triangle),
+      m_adjacencyList(std::vector<std::weak_ptr<TriangleGraph::Node>>(
+          adjacencyList.begin(), adjacencyList.end())) {}
+
+std::shared_ptr<Triangle> TriangleGraph::Node::getTriangle() const {
+  return m_triangle.lock();
+}
+const std::vector<TriangleGraph::Node::AdjacentNode>
+TriangleGraph::Node::getAdjacencyList() const {
+  std::vector<TriangleGraph::Node::AdjacentNode> adjacencyList;
+  EdgeId edgeId;
+  for (size_t i = 0; i < m_adjacencyList.size(); ++i) {
+    switch (i) {
+    case 0:
+      edgeId = EdgeId::FIRST;
+      break;
+    case 1:
+      edgeId = EdgeId::SECOND;
+      break;
+    case 3:
+      edgeId = EdgeId::THIRD;
+      break;
+    default:
+      assert(false);
+      break;
+    }
+    adjacencyList.push_back(TriangleGraph::Node::AdjacentNode{
+        .adjacencyNode = m_adjacencyList.at(i), .id = edgeId});
+  }
+  return adjacencyList;
+}
+
+const TriangleGraph &
+TriangleGraph::operator=(const TriangleGraph &triangleGraph) {
+  m_nodes = triangleGraph.m_nodes;
+  m_triangles = triangleGraph.m_triangles;
+  return triangleGraph;
+}
+TriangleGraph::TriangleGraph(
+    const std::vector<std::shared_ptr<TriangleGraph::Node>> &nodes)
+    : m_nodes(nodes),
+      m_triangles(
+          [](const std::vector<std::shared_ptr<TriangleGraph::Node>> &nodes)
+              -> std::vector<std::shared_ptr<Triangle>> {
+            std::vector<std::shared_ptr<Triangle>> triangles;
+            for (const std::shared_ptr<TriangleGraph::Node> &node : nodes) {
+              triangles.push_back(node->getTriangle());
+            }
+            return triangles;
+          }(nodes)),
+      m_elipson([&nodes]() -> float {
+        for (const std::shared_ptr<TriangleGraph::Node> &node : nodes) {
+          std::shared_ptr<Triangle> triangle = node->getTriangle();
+        }
+      }()) {}
+
+std::vector<std::shared_ptr<Triangle>> TriangleGraph::getTriangles() const {
+  return m_triangles;
+}
+
+std::vector<std::shared_ptr<TriangleGraph::Node>>
+TriangleGraph::getNodes() const {
+  return m_nodes;
+}
+TriangleGraph TriangleGraph::mergeHullWithPoint(
+    const std::shared_ptr<TriangleGraph::Node> &node, const glm::vec3 &point) {
+  TriangleGraph triangleGraph;
+  struct NodeAndVisit {
+    std::shared_ptr<Node> node;
+    std::shared_ptr<Node> parentNode;
+    bool visited = false;
+    EdgeId edgeIndex;
+  };
+  std::vector<NodeAndVisit> nodes;
+  for (const TriangleGraph::Node::AdjacentNode &node :
+       node->getAdjacencyList()) {
+    nodes.push_back({.node = node.adjacencyNode.lock()});
+  }
+  std::vector<NodeAndVisit> nodeStack;
+  struct HorizoneNode {
+    std::shared_ptr<TriangleGraph::Node> node;
+    std::shared_ptr<Triangle> triangle;
+    std::array<glm::vec3, 2> edge;
+    std::shared_ptr<TriangleGraph::Node> coneNode =
+        std::shared_ptr<TriangleGraph::Node>();
+  };
+  std::vector<HorizoneNode> horizonNodes;
+  NodeAndVisit currentNode = nodes.at(0);
+  std::unordered_set<std::shared_ptr<TriangleGraph::Node>> hullNodes;
+  do {
+    if (currentNode.visited == false) {
+      if (currentNode.node->getTriangle()->isTowards(point)) {
+
+        currentNode.visited = true;
+        for (const TriangleGraph::Node::AdjacentNode &adjacentNode :
+             currentNode.node->getAdjacencyList()) {
+          nodeStack.push_back(
+              NodeAndVisit{.node = adjacentNode.adjacencyNode.lock(),
+                           .parentNode = currentNode.node,
+                           .edgeIndex = adjacentNode.id});
+        }
+      }
+    } else {
+      hullNodes.insert(currentNode.node);
+      currentNode = nodeStack.back();
+      std::array<glm::vec3, 2> edge =
+          currentNode.parentNode->getTriangle()->getEdge(currentNode.edgeIndex);
+      horizonNodes.push_back(
+          HorizoneNode{.node = currentNode.node,
+                       .triangle = std::make_shared<Triangle>(point, edge.at(0),
+                                                              edge.at(1))});
+    }
+
+  } while (nodeStack.size() == 0);
+  std::unordered_set<std::shared_ptr<TriangleGraph::Node>> horizonConeNodes;
+  for (size_t i = 0; i < horizonNodes.size(); ++i) {
+    size_t nextIndex = (i + 1) % horizonNodes.size();
+    size_t previousIndex = (i - 1) % horizonNodes.size();
+    horizonConeNodes.insert(std::make_shared<TriangleGraph::Node>(
+        horizonNodes.at(i).triangle,
+        std::vector<std::shared_ptr<TriangleGraph::Node>>(
+            {horizonNodes.at(previousIndex).coneNode,
+             horizonNodes.at(nextIndex).coneNode, horizonNodes.at(i).node})));
+  }
+  hullNodes.insert(horizonConeNodes.begin(), horizonConeNodes.end());
+  return TriangleGraph(std::vector<std::shared_ptr<TriangleGraph::Node>>(
+      hullNodes.begin(), hullNodes.end()));
+}
+
+bool TriangleGraph::isConvex() const {
+  for (const std::shared_ptr<Triangle> &triangle1 : m_triangles) {
+    for (const std::shared_ptr<Triangle> &triangle2 : m_triangles) {
+      if (triangle1.get() == triangle2.get()) {
+        continue;
+      } else {
+        for (const glm::vec3 &point : triangle1->getVertices()) {
+          if (!triangle2->isTowards(point)) {
+            return false;
+          }
+        }
+      }
+    }
+  }
+  return true;
+}
+const std::vector<std::shared_ptr<Triangle>>
+quickHullOld(const std::vector<glm::vec3> &points) {
+  assert(points.size() > 4);
+  glm::vec3 positiveXExtreme = points.at(0);
+  for (const glm::vec3 &point : points) {
+    if (point.x < positiveXExtreme.x) {
+      positiveXExtreme = point;
+    }
+  }
+  glm::vec3 negativeXExtreme = points.at(0);
+  for (const glm::vec3 &point : points) {
+    if (point.x > negativeXExtreme.x) {
+      negativeXExtreme = point;
+    }
+  }
+  glm::vec3 positiveYExtreme = points.at(0);
+  for (const glm::vec3 &point : points) {
+    if (point.y < positiveXExtreme.y) {
+      positiveXExtreme = point;
+    }
+  }
+  glm::vec3 negativeYExtreme = points.at(0);
+  for (const glm::vec3 &point : points) {
+    if (point.y > negativeXExtreme.y) {
+      negativeXExtreme = point;
+    }
+  }
+  glm::vec3 positiveZExtreme = points.at(0);
+  for (const glm::vec3 &point : points) {
+    if (point.z < positiveXExtreme.z) {
+      positiveXExtreme = point;
+    }
+  }
+  glm::vec3 negativeZExtreme = points.at(0);
+  for (const glm::vec3 &point : points) {
+    if (point.z > negativeXExtreme.z) {
+      negativeXExtreme = point;
+    }
+  }
+  struct DistanceAndExtremes {
+    float distance;
+    glm::vec3 extreme1;
+    glm::vec3 extreme2;
+    enum Axis { X, Y, Z } axis;
+  };
+
+  float dimensionXDistance = glm::abs(positiveXExtreme.x - negativeXExtreme.x);
+  DistanceAndExtremes xExtremes{.distance = dimensionXDistance,
+                                .extreme1 = positiveXExtreme,
+                                .extreme2 = negativeXExtreme,
+                                .axis = DistanceAndExtremes::Axis::X};
+
+  float dimensionYDistance = glm::abs(positiveXExtreme.y - negativeXExtreme.y);
+  DistanceAndExtremes yExtremes{.distance = dimensionYDistance,
+                                .extreme1 = positiveYExtreme,
+                                .extreme2 = negativeYExtreme,
+                                .axis = DistanceAndExtremes::Axis::Y};
+
+  float dimensionZDistance = glm::abs(positiveXExtreme.z - negativeZExtreme.y);
+  DistanceAndExtremes zExtremes{.distance = dimensionZDistance,
+                                .extreme1 = positiveZExtreme,
+                                .extreme2 = negativeZExtreme,
+                                .axis = DistanceAndExtremes::Axis::Z};
+  DistanceAndExtremes maxExtremes = xExtremes;
+  DistanceAndExtremes secondToMaxExtremes = yExtremes;
+  DistanceAndExtremes minExtremes = zExtremes;
+  if (minExtremes.distance > secondToMaxExtremes.distance) {
+    DistanceAndExtremes temp = minExtremes;
+    minExtremes = secondToMaxExtremes;
+    secondToMaxExtremes = temp;
+  }
+  if (secondToMaxExtremes.distance > maxExtremes.distance) {
+    DistanceAndExtremes temp = secondToMaxExtremes;
+    secondToMaxExtremes = maxExtremes;
+    secondToMaxExtremes = temp;
+  }
+  if (minExtremes.distance > secondToMaxExtremes.distance) {
+    DistanceAndExtremes temp = minExtremes;
+    minExtremes = secondToMaxExtremes;
+    secondToMaxExtremes = temp;
+  }
+  const glm::vec3 initialPoint1 = maxExtremes.extreme1;
+  const glm::vec3 initialPoint2 = maxExtremes.extreme2;
+  const glm::vec3 edge1 = initialPoint1 - initialPoint2;
+  const glm::vec3 edge2 = secondToMaxExtremes.extreme1 - initialPoint2;
+  const glm::vec3 edge3 = secondToMaxExtremes.extreme2 - initialPoint2;
+  float distance1 = glm::abs(glm::dot(edge1, edge2));
+  float distance2 = glm::abs(glm::dot(edge1, edge3));
+  glm::vec3 initialPoint3 = secondToMaxExtremes.extreme1;
+  if (distance1 < distance2) {
+    initialPoint3 = secondToMaxExtremes.extreme2;
+  }
+
+  const Triangle initialTriangle(initialPoint1, initialPoint2, initialPoint3);
+  const std::optional<glm::vec3> initialPoint =
+      initialTriangle.getFurthestPointTowards(points);
+  assert(initialPoint.has_value());
+  Tetrahedron initialTetrahedron(initialTriangle, initialPoint.value());
+
+  TriangleGraph triangleGraph = initialTetrahedron.getTriangleGraph();
+  bool hullFound = true;
+  do {
+    hullFound = true;
+    for (const std::shared_ptr<TriangleGraph::Node> &node :
+         triangleGraph.getNodes()) {
+      std::optional<glm::vec3> furthestPoint =
+          node->getTriangle()->getFurthestPointTowards(points);
+
+      if (furthestPoint.has_value()) {
+
+        hullFound = false;
+        assert(node->getTriangle()->isTowards(furthestPoint.value()));
+        triangleGraph =
+            triangleGraph.mergeHullWithPoint(node, furthestPoint.value());
+        assert(triangleGraph.isConvex());
+      }
+    }
+  } while (!hullFound);
+  return triangleGraph.getTriangles();
+}
+

@@ -13,3 +13,6 @@
 [submodule "ImGuiFileDialog"]
 	path = ImGuiFileDialog
 	url = https://github.com/aiekick/ImGuiFileDialog.git
+[submodule "subprojects/quickhull"]
+	path = subprojects/quickhull
+	url = https://github.com/akuukka/quickhull.git

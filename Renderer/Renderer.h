@@ -3,6 +3,7 @@
 #include "imgui_impl_vulkan.h"
 #include "stb_image.h"
 #include "tiny_gltf.h"
+#include <sys/wait.h>
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -11,19 +12,12 @@
 #include <glm/glm.hpp>
 #include <vk_mem_alloc.h>
 
+#include "Mesh.h"
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
-
-static void check_vk_result(VkResult err) {
-  if (err == 0)
-    return;
-  fprintf(stderr, "[vulkan] Error: VkResult = %d\n", err);
-  if (err < 0)
-    abort();
-}
-
+namespace Renderer {
 struct UniformBufferObject {
   glm::mat4 model;
   glm::mat4 view;
@@ -43,6 +37,19 @@ struct Vertex {
   getAttributeDescriptions();
 };
 
+class VulkanBuffer {
+public:
+  VulkanBuffer(const VulkanBuffer &buffer) = default;
+  ~VulkanBuffer() = default;
+  VulkanBuffer(const VkBuffer &buffer, const VmaAllocation &allocation,
+               void *const bufferPointer);
+
+  const VkBuffer buffer;
+  const VmaAllocation allocation;
+  void *const bufferPointer;
+
+private:
+};
 struct BufferData {
   VkBuffer indexBuffer;
   VmaAllocation indexAllocation;
@@ -73,19 +80,18 @@ private:
 
 class Texture {
 public:
-  friend class Renderer;
-  Texture() = delete;
   Texture(const VkImage &image, const VkImageView &imageView,
           const VmaAllocation &allocation, const VkSampler &sampler,
-          const std::vector<VkDescriptorSet> &descriptorSet);
+          const VkDescriptorSet &descriptorSet);
   void clean(const VkDevice &device, const VmaAllocator &allocator) const;
 
-private:
   const VkImage m_image;
   const VkImageView m_imageView;
   const VmaAllocation m_allocation;
   const VkSampler m_sampler;
-  const std::vector<VkDescriptorSet> m_descriptorSet;
+  const VkDescriptorSet m_descriptorSet;
+
+private:
 };
 
 class Pipeline {
@@ -190,16 +196,69 @@ struct SwapChainSupportDetails {
   std::vector<VkPresentModeKHR> presentModes;
 };
 
+class Drawing {
+public:
+  virtual ~Drawing() = default;
+  Drawing(const std::shared_ptr<Pipeline> &pipeline, const int numberOfVertices,
+          const std::vector<std::shared_ptr<VulkanBuffer>> &vertexVulkanBuffers,
+          const std::shared_ptr<VulkanBuffer> &indexVulkanBuffer,
+          const std::shared_ptr<VkDescriptorPool> &mvpDescriptorPool,
+          const std::vector<std::shared_ptr<VkDescriptorSet>> &mvpDescriptorSet,
+          const std::vector<std::shared_ptr<VulkanBuffer>> mvpBuffers);
+  virtual void setTranform(const glm::mat4 &transform);
+  virtual glm::mat4 getTranform() const;
+  virtual void bind(const VkCommandBuffer &cmd, const int currentImage,
+                    const VkExtent2D &swapChainExtent) const = 0;
+  const std::shared_ptr<Pipeline> pipeline;
+  const int numberOfVertices;
+  const std::vector<std::shared_ptr<VulkanBuffer>> vertexVulkanBuffers;
+  const std::shared_ptr<VulkanBuffer> indexVulkanBuffer;
+  const std::shared_ptr<VkDescriptorPool> mvpDescriptorPool;
+  const std::vector<std::shared_ptr<VkDescriptorSet>> mvpDescriptorSet;
+  const std::vector<std::shared_ptr<VulkanBuffer>> mvpBuffers;
+
+private:
+  glm::mat4 m_tranform;
+};
+class SolidColorDrawing : public Drawing {
+public:
+  virtual ~SolidColorDrawing() = default;
+  virtual void bind(const VkCommandBuffer &cmd, const int currentImage,
+                    const VkExtent2D &swapChainExtent) const override;
+  const std::weak_ptr<VkDescriptorSet> colorDescriptorSet;
+
+private:
+};
+class TexturedDrawing : public Drawing {
+public:
+  virtual ~TexturedDrawing() = default;
+  TexturedDrawing(const TexturedDrawing &texturedDrawing) = default;
+  TexturedDrawing(
+      const std::shared_ptr<Pipeline> &pipeline, const int numberOfVertices,
+      const std::vector<std::shared_ptr<VulkanBuffer>> &vertexVulkanBuffers,
+      const std::shared_ptr<VulkanBuffer> &indexVulkanBuffer,
+      const std::shared_ptr<VkDescriptorPool> &mvpDescriptorPool,
+      const std::vector<std::shared_ptr<VkDescriptorSet>> &mvpDescriptorSet,
+      const std::vector<std::shared_ptr<VulkanBuffer>> mvpBuffers,
+      const std::shared_ptr<VkDescriptorSet> &textureDescriptorSet);
+
+  virtual void bind(const VkCommandBuffer &cmd, const int currentImage,
+                    const VkExtent2D &swapChainExtent) const override;
+  const std::shared_ptr<VkDescriptorSet> textureDescriptorSet;
+
+private:
+};
+
 class RenderObject;
 class Renderer {
 public:
   friend class RenderObject;
   Renderer();
   RenderObject loadModel(const tinygltf::Model &model);
+  std::vector<std::shared_ptr<Drawing>> loadModel(const Engine::Scene &scene);
+  std::shared_ptr<Drawing> loadModel(const Engine::MeshNode &meshNode);
   bool shouldExit();
-  void draw(RenderObject *const fmrenderObject);
-  void drawAsWireframe(RenderObject *const fmrenderObject,
-                       const glm::vec3 &color);
+  void draw(const std::shared_ptr<Drawing> &drawing);
   void drawLabel(const std::string *label);
   void endFrame();
   void destroy();
@@ -241,16 +300,12 @@ private:
   void createDepthResources();
   void createFramebuffers();
   void createCommandPool();
-  void createTextureImage();
   void createImage(const uint32_t &width, const uint32_t &height,
                    const VkFormat &format, const VkImageTiling &tiling,
                    const VkImageUsageFlags &usage,
                    const VmaMemoryUsage &memoryUsage,
                    const VmaAllocationCreateFlags &allocationFlags,
                    VkImage &image, VmaAllocation &allocation);
-  void createTextureImageView();
-  void createTextureSampler();
-  void createVertexBuffer();
   void copyBuffer(const VkBuffer &srcBuffer, const VkBuffer &dstBuffer,
                   const VkDeviceSize &size);
   VkCommandBuffer beginSingleTimeCommands();
@@ -260,10 +315,7 @@ private:
   void copyBufferImage(const VkBuffer &buffer, const VkImage &image,
                        const uint32_t &width, const uint32_t &height);
   void endSingleTimeCommands(VkCommandBuffer &commandBuffer);
-  void createDescriptorPool();
   void createDescriptorSetLayouts();
-  void allocateUboDescriptorSets();
-  void createIndexBuffer();
   void createCommandBuffer();
   void createWireframePipeline();
   void createSyncObjects();
@@ -293,21 +345,25 @@ private:
 
   VkShaderModule createShaderModule(const std::vector<char> &code);
 
-  std::vector<VkDescriptorSet>
-  allocateTextureDescriptorSet(const VkImageView &imageview,
-                               const VkSampler &sampler);
+  VkDescriptorSet allocateTextureDescriptorSet(const VkImageView &imageview,
+                                               const VkSampler &sampler);
+  void allocateTextureDescriptorSet(
+      std::vector<std::shared_ptr<Engine::Image>> images);
+
+  RenderObject
+  loadMeshBuffers(std::vector<std::shared_ptr<Engine::MeshNode>> nodes);
   void createBuffer(const VkDeviceSize &size, const VkBufferUsageFlags &usage,
                     const VmaMemoryUsage &memoryUsage,
                     const VmaAllocationCreateFlags &allocationFlags,
                     VkBuffer &buffer, VmaAllocation &allocation);
   void drawFrame();
+
+  void drawScene();
   void updateUniformBuffer(const uint32_t &currentImage);
   void cleanupSwapChain();
   void recreateSwapChain();
   void cleanup();
 
-  void setMatrix(const uint32_t &index, const glm::mat4 &matrix);
-  void resizeDescriptorSets();
   bool hasStencilComponent(VkFormat format);
 
   GLFWwindow *m_window;
@@ -335,20 +391,12 @@ private:
   VkImageView m_depthImageView;
   VkCommandPool m_commandPool;
   VkExtent2D swapChainExtent;
-  VkImage m_textureImage;
-  VmaAllocation m_textureAllocation;
-  VkImageView m_textureImageView;
-  VkSampler m_textureSampler;
-  VmaAllocation m_vertexAllocation;
-  VmaAllocation m_indexAllocation;
-  VkBuffer m_vertexBuffer;
-  VkDescriptorPool m_firstDescriptorPool;
-  VkDescriptorSetLayout m_uboDescriptorSetLayout;
+  VkDescriptorSetLayout m_mvpDescriptorSetLayout;
   VkDescriptorSetLayout m_textureDescriptorSetLayout;
   VkDescriptorSetLayout m_solidColorDescriptorSetLayout;
-  std::vector<VkDescriptorSet> m_uboDescriptorSets;
+  VkDescriptorPool m_imguiDescriptorPool;
+  std::vector<std::shared_ptr<VkDescriptorSet>> m_mvpDescriptorSets;
   std::vector<VkDescriptorSet> m_solidColorDescriptorSets;
-  VkBuffer m_indexBuffer;
   std::vector<VkCommandBuffer> m_commandBuffers;
   std::vector<VkSemaphore> m_imageAvailableSemaphores;
   std::vector<VkSemaphore> m_renderFinishedSemaphores;
@@ -370,26 +418,23 @@ private:
   std::vector<const char *> extensions;
   VkDebugUtilsMessengerEXT m_debugMessenger;
 
-  VkPipeline m_pipeline;
-  VkPipelineLayout m_pipelineLayout;
   uint32_t m_currentFrame = 0;
+  std::vector<VkDescriptorPool> m_imageDescriptorPools;
+  std::vector<std::shared_ptr<VkDescriptorSet>> m_imageDescriptorSetPtr;
   std::vector<Texture> m_loadedTextures;
+  std::vector<std::shared_ptr<VulkanBuffer>> m_vertexBuffers;
+  std::vector<std::shared_ptr<VulkanBuffer>> m_indexBuffers;
 
-  std::vector<VkBuffer> m_uboBuffer;
-  std::vector<VmaAllocation> m_uboAllocation;
-  std::vector<void *> m_uniformBufferMapped;
+  std::vector<std::shared_ptr<VulkanBuffer>> m_mvpVulkanBuffers;
 
-  std::vector<VkBuffer> m_solidColorUniformBuffer;
-  std::vector<VmaAllocation> m_solidColorUniformAllocation;
-  std::vector<void *> m_solidColorUniformBufferMapped;
   uint32_t findMemoryType(const uint32_t &typeFilter,
                           const VkMemoryPropertyFlags &properties);
   ImGui_ImplVulkanH_Window m_imguiWindow;
   std::vector<BufferData> m_loadedBufferData;
 
-  std::vector<glm::mat4> m_modelMatrices;
-  std::vector<std::shared_ptr<Node>> m_pNodeToDraw;
-  std::vector<std::shared_ptr<ColoredNode>> m_pNodeToDrawWireframe;
+  std::vector<std::shared_ptr<Drawing>> m_drawings;
+  std::vector<std::shared_ptr<Pipeline>> m_pipelines;
+  std::vector<std::shared_ptr<Drawing>> m_toDraw;
 };
 
 class RenderObject {
@@ -407,3 +452,4 @@ private:
   std::vector<std::shared_ptr<Node>> m_nodes;
   tinygltf::Model m_model;
 };
+} // namespace Renderer

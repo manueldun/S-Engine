@@ -2,10 +2,8 @@
 #include "Renderer.h"
 #include "glm/ext/vector_float3.hpp"
 #include "glm/fwd.hpp"
-#include "utils.h"
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/quaternion.hpp"
-#include <span>
 #include <sys/wait.h>
 #include <vector>
 namespace Physics {
@@ -77,8 +75,8 @@ struct State {
 };
 class RigidBody {
 public:
-  RigidBody(const std::span<const glm::vec3> &vertices,
-            const IndexDataSpan &indexSpan, const float &mass,
+  RigidBody(const std::vector<glm::vec3> &vertices, 
+            const std::vector<size_t> &indexBuffer, const float &mass,
             const glm::mat3 &Ibody = glm::mat3(0.0f),
             const glm::vec3 &initialPosition = glm::vec3(0.0f),
             const glm::quat &initialOrientation =
@@ -96,14 +94,12 @@ public:
   glm::quat getOrientation() const;
   void setOrientation(const glm::quat &orientation);
   bool doesIntersect(const RigidBody &rigidBody) const;
-  const IndexDataSpan getIndexSpan() const;
-  const std::span<const glm::vec3> getVertices() const;
   const glm::mat4 getTransform() const;
 
 private:
   const glm::quat getStandardOrientation() const;
-  const std::span<const glm::vec3> m_vertices;
-  const IndexDataSpan m_indexSpan;
+  const std::vector<glm::vec3> m_vertices;
+  const std::vector<size_t> m_indices;
   const float m_mass;
   const glm::mat3 m_Ibody;
   const glm::mat3 m_IbodyInv;
@@ -124,11 +120,19 @@ private:
   float m_time = 0.0f;
 };
 class Body;
+
 class RigidBodySystem {
 public:
   void eulerStep(const float &delta);
   void addRigidBody(const RigidBody &rigidBody);
   Body addMesh(const tinygltf::Model &model, const float &mass,
+               const glm::vec3 &initialPosition = glm::vec3(0.0f),
+               const glm::quat &initialOrientation = glm::quat(1.0f, 0.0f, 0.0f,
+                                                               0.0f),
+               const glm::vec3 &initialVelocity = glm::vec3(0.0f),
+               const glm::vec3 &initialAngularVelocity = glm::vec3(0.0f));
+
+  Body addMesh(const Engine::MeshNode &meshNode, const float &mass,
                const glm::vec3 &initialPosition = glm::vec3(0.0f),
                const glm::quat &initialOrientation = glm::quat(1.0f, 0.0f, 0.0f,
                                                                0.0f),
