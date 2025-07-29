@@ -9,102 +9,6 @@
 #include <iostream>
 #include <sys/wait.h>
 namespace Physics {
-ParticleDerivative::ParticleDerivative(const glm::vec3 &dPosition,
-                                       const glm::vec3 &dVelocity)
-    : m_dPosition(dPosition), m_dVelocity(dVelocity) {}
-
-void ParticleDerivative::scale(const float &scaleConstant) {
-  m_dPosition = m_dPosition * scaleConstant;
-}
-
-Plane::Plane(const glm::vec3 &point, const glm::vec3 &normal)
-    : m_point(point), m_normal(normal) {}
-
-Particle::Particle(const glm::vec3 &initialPosition,
-                   const glm::vec3 &initialVelocity,
-                   const glm::vec3 &initialForceAccumulator, const float &mass)
-    : m_mass(mass), m_position(initialPosition), m_velocity(initialVelocity),
-      m_forceAcumulator(initialForceAccumulator) {}
-
-const ParticleDerivative Particle::getDerivatives(const glm::vec3 &force) {
-  m_forceAcumulator = force;
-  return ParticleDerivative(m_velocity, m_forceAcumulator / m_mass);
-}
-
-glm::vec3 Particle::getPosition() { return m_position; }
-
-void ParticleSystem::eulerStep(const float &time) {
-  static float lastTime = time;
-  static float delta = time - lastTime;
-  delta = time - lastTime;
-  const float MAX_DELTA = 0.016f;
-  if (delta > MAX_DELTA) {
-    std::vector<Particle> nextParticles = m_particles;
-    for (Particle &nextParticle : nextParticles) {
-
-      nextParticle.m_forceAcumulator = glm::vec3(0.0, 0.0, 0.0);
-      glm::vec3 dPosition = nextParticle.m_velocity;
-      glm::vec3 gravity = glm::vec3(0.0f, 0.0f, -9.8f) * nextParticle.m_mass;
-      glm::vec3 dVelocity =
-          gravity + nextParticle.m_forceAcumulator / nextParticle.m_mass;
-      dPosition *= delta;
-      dVelocity *= delta;
-      nextParticle.m_position += dPosition;
-      nextParticle.m_velocity += dVelocity;
-      m_simulationClock += delta;
-    }
-    uint32_t particleIndex = 0;
-    const float deltaMaxError = 0.002;
-    for (Particle &nextParticle : nextParticles) {
-      for (Plane &plane : m_planes) {
-
-        glm::vec3 nextPosition = nextParticle.m_position;
-
-        if (glm::dot(nextPosition - plane.m_point, plane.m_normal) < 0.0f) {
-
-          nextPosition = glm::mix(
-              nextPosition, m_particles.at(particleIndex).m_position, 0.5f);
-          float distanceError =
-              glm::dot(nextPosition - plane.m_point, plane.m_normal);
-
-          while (distanceError >= deltaMaxError && distanceError <= 0.0f) {
-
-            if (distanceError < 0.0f) {
-
-              nextPosition = glm::mix(
-                  nextPosition, m_particles.at(particleIndex).m_position, 0.5f);
-
-            } else {
-              nextPosition = glm::mix(
-                  nextPosition, m_particles.at(particleIndex).m_position, 1.5f);
-            }
-            distanceError =
-                glm::dot(nextPosition - plane.m_point, plane.m_normal);
-          }
-
-          nextParticle.m_velocity = -nextParticle.m_velocity * 0.5f;
-        }
-        nextParticle.m_position = nextPosition;
-      }
-
-      m_particles = std::move(nextParticles);
-
-      particleIndex++;
-    }
-    delta -= MAX_DELTA;
-    lastTime = time;
-  }
-}
-
-void ParticleSystem::addParticle(const Particle &particle) {
-  m_particles.push_back(particle);
-}
-
-void ParticleSystem::addPlane(const Plane &plane) { m_planes.push_back(plane); }
-
-glm::vec3 ParticleSystem::getParticlePosition(const uint32_t &index) const {
-  return m_particles.at(index).m_position;
-}
 
 RigidBody::RigidBody(const std::vector<glm::vec3> &vertices,
                      const std::vector<size_t> &indexBuffer, const float &mass,
@@ -130,11 +34,13 @@ const State Physics::RigidBody::getDerivative(const glm::vec3 &forces,
 
 void RigidBody::eulerStep(const float &delta) {
   State derivativeState = getDerivative(m_force, m_torque);
-  m_position = m_position + delta * derivativeState.m_velocity;
-  m_orientation = (delta * derivativeState.m_angularVelocity) * m_orientation;
-  m_linearMomentum = m_linearMomentum + delta * derivativeState.m_forces;
-  m_angularMomentum = m_angularMomentum + delta * derivativeState.m_torques;
-  m_time += delta;
+  if (m_mass != 0.0f) {
+    m_position = m_position + delta * derivativeState.m_velocity;
+    m_orientation = (delta * derivativeState.m_angularVelocity) * m_orientation;
+    m_linearMomentum = m_linearMomentum + delta * derivativeState.m_forces;
+    m_angularMomentum = m_angularMomentum + delta * derivativeState.m_torques;
+    m_time += delta;
+  }
 }
 
 void RigidBody::addForcesAndTorques(const glm::vec3 &force,
@@ -162,6 +68,7 @@ void RigidBody::setOrientation(const glm::quat &orientation) {
   m_orientation = orientation;
 }
 bool RigidBody::doesIntersect(const RigidBody &rigidBody) const {
+
   return false;
 }
 const glm::mat4 RigidBody::getTransform() const {
@@ -184,13 +91,7 @@ glm::mat3 RigidBody::getInvInertialTensor() const {
   return orientation * m_IbodyInv * glm::transpose(orientation);
 }
 
-glm::vec3 RigidBody::getVelocity() const {
-  if (m_mass == 0.0f) {
-    return glm::vec3(0.0f);
-  } else {
-    return m_linearMomentum / m_mass;
-  }
-}
+glm::vec3 RigidBody::getVelocity() const { return m_linearMomentum / m_mass; }
 glm::vec3 RigidBody::getAngularVelocity() const {
   return (getInvInertialTensor() * m_angularMomentum);
 }
@@ -229,8 +130,8 @@ Body RigidBodySystem::addMesh(const Engine::MeshNode &meshNode,
   const auto &indexBuffer = hull.getIndexBuffer();
 
   std::vector<glm::vec3> vectorHull;
-  for(const auto & data:vertexBuffer){
-    vectorHull.push_back(glm::vec3(data.x,data.y,data.z));
+  for (const auto &data : vertexBuffer) {
+    vectorHull.push_back(glm::vec3(data.x, data.y, data.z));
   }
 
   const glm::vec3 &centerOfMass = glm::vec3(0.0f);
@@ -240,10 +141,13 @@ Body RigidBodySystem::addMesh(const Engine::MeshNode &meshNode,
   if (mass != 0.0f) {
     // inertialTensor = getInertiaTensor(vertexBuffer, indexBuffer, false);
   }
-
+  float meshMass = mass;
+  if (meshNode.mass != 0.0f) {
+    meshMass = meshNode.mass;
+  }
   m_rigidBodies.push_back(RigidBody(
-      vectorHull, indexBuffer, mass, inertialTensor, initialPosition,
-      initialOrientation, initialVelocity, initialAngularVelocity));
+      vectorHull, indexBuffer, meshMass, inertialTensor, meshNode.position,
+      meshNode.orientation, initialVelocity, initialAngularVelocity));
 
   return Body(m_rigidBodies.size() - 1, *this);
 }

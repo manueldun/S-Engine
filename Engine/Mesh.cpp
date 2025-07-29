@@ -1,4 +1,8 @@
 #include "Mesh.h"
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/fwd.hpp"
+#include "glm/gtc/quaternion.hpp"
+#include "glm/gtc/type_ptr.hpp"
 #include <memory>
 
 namespace Engine {
@@ -20,9 +24,12 @@ MeshData::MeshData(const std::vector<float> &position,
       tangent(tangent) {}
 
 MeshNode::MeshNode(const MeshData &meshData, const std::string &name,
+                   const float &mass, const glm::vec3 &position,
+                   const glm::quat &orientation, glm::vec3 &scale,
                    const std::shared_ptr<Image> &colorTexture,
                    const std::vector<std::weak_ptr<MeshNode>> &children)
-    : meshData(meshData), name(name), colorTexture(colorTexture),
+    : meshData(meshData), name(name), mass(mass), position(position),
+      orientation(orientation), scale(scale), colorTexture(colorTexture),
       children(children) {}
 
 Scene::Scene(const tinygltf::Model &model) {
@@ -148,8 +155,25 @@ Scene::Scene(const tinygltf::Model &model) {
       baseColorImage = std::make_shared<Image>(
           std::vector<uint8_t>({255, 0, 0, 0}), 1, 1, 4);
     }
+    float mass = 0.0f;
+    if (node.extras.Has("mass"))
+      mass = node.extras.Get("mass").GetNumberAsDouble();
+    glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f);
+    if (node.scale.size() != 0) {
+      scale = glm::make_vec3(node.scale.data());
+    }
+    glm::quat orientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+    if (node.rotation.size() != 0) {
+      orientation = glm::make_quat(node.rotation.data());
+    }
+    glm::vec3 translation = glm::vec3(0.0f, 0.0f, 0.0f);
+    if (node.translation.size() != 0) {
+      translation = glm::make_vec3(node.translation.data());
+    }
+    assert(node.matrix.size() == 0);
     m_meshNodes.push_back(std::make_shared<MeshNode>(
-        meshData, node.name, baseColorImage, meshNodeChildren));
+        meshData, node.name, mass, translation, orientation, scale,
+        baseColorImage, meshNodeChildren));
   }
 }
 std::vector<std::shared_ptr<MeshNode>> Scene::getMeshNodes() const {

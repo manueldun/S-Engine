@@ -254,8 +254,6 @@ class Renderer {
 public:
   friend class RenderObject;
   Renderer();
-  RenderObject loadModel(const tinygltf::Model &model);
-  std::vector<std::shared_ptr<Drawing>> loadModel(const Engine::Scene &scene);
   std::shared_ptr<Drawing> loadModel(const Engine::MeshNode &meshNode);
   bool shouldExit();
   void draw(const std::shared_ptr<Drawing> &drawing);

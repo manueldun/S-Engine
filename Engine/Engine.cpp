@@ -14,7 +14,12 @@ void Engine::loadScene(const std::string &path) {
 
   const tinygltf::Model &sceneModel = loadGltfFile(path);
   const Scene scene(sceneModel);
-  addEntities(scene);
+  for (const std::shared_ptr<MeshNode> &meshNode : scene.getMeshNodes()) {
+    auto drawing = renderer.loadModel(*meshNode);
+    auto body = physicsSystem.addMesh(*meshNode);
+    entities.push_back(Entity(drawing, body));
+  }
+
 }
 void Engine::loop() {
 
@@ -36,11 +41,4 @@ void Engine::loop() {
   renderer.endFrame();
 }
 bool Engine::shouldExit() { return renderer.shouldExit(); }
-void Engine::addEntities(const Scene &scene) {
-  for (const std::shared_ptr<MeshNode> &meshNode : scene.getMeshNodes()) {
-    auto drawing = renderer.loadModel(*meshNode);
-    auto body = physicsSystem.addMesh(*meshNode, 1.0f);
-    entities.push_back(Entity(drawing, body));
-  }
-}
 } // namespace Engine

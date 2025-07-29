@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
 
   try {
     Engine::Engine engine;
-    engine.loadScene("/home/manuel/3d-assets/test_assets/cube.gltf");
+    engine.loadScene("/home/manuel/3d-assets/test_assets/physicsScene.gltf");
     while(!engine.shouldExit()){
       engine.loop();
     }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "glm/glm.hpp"
+#include <glm/gtc/quaternion.hpp>
 #include "tiny_gltf.h"
 #include <array>
 #include <cstdint>
@@ -52,13 +54,18 @@ class MeshNode {
 public:
   MeshNode(const MeshNode &meshData) = default;
   ~MeshNode() = default;
-  MeshNode(const MeshData &meshData, const std::string &name,
-           const std::shared_ptr<Image> &colorTexture,
+  MeshNode(const MeshData &meshData, const std::string &name, const float &mass,
+           const glm::vec3 &position, const glm::quat &orientation,
+           glm::vec3 &scale, const std::shared_ptr<Image> &colorTexture,
            const std::vector<std::weak_ptr<MeshNode>> &children);
   std::vector<float> getVertices();
 
   const MeshData meshData;
   const std::string name;
+  const float mass;
+  const glm::vec3 position;
+  const glm::quat orientation;
+  const glm::vec3 scale;
   const std::shared_ptr<Image> colorTexture;
   const std::vector<std::weak_ptr<MeshNode>> children;
 

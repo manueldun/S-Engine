@@ -21,7 +21,6 @@ public:
   bool shouldExit();
 
 private:
-  void addEntities(const Scene &scene);
   std::vector<Entity> entities;
   Renderer::Renderer renderer;
   Physics::RigidBodySystem physicsSystem;
