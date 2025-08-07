@@ -2,11 +2,13 @@
 #include "Renderer.h"
 #include "glm/ext/vector_float3.hpp"
 #include "glm/fwd.hpp"
+#include <cstddef>
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/quaternion.hpp"
 #include <sys/wait.h>
 #include <vector>
-namespace Physics {
+#include "Triangle.h"
+namespace ph {
 
 struct State {
   glm::vec3 m_velocity;
@@ -37,10 +39,21 @@ public:
   bool doesIntersect(const RigidBody &rigidBody) const;
   const glm::mat4 getTransform() const;
 
+  struct PlanePointCollision {
+    glm::vec3 point;
+    Triangle trianglePlane;
+  };
+  static std::vector<PlanePointCollision> planePointCollisions(
+      const std::vector<glm::vec3> &hullPoints1,
+      const std::vector<size_t> &hullIndices1, const glm::mat4 &tranform1,
+      const std::vector<glm::vec3> &hullPoints2,
+      const std::vector<size_t> &hullIndices2, const glm::mat4 &tranform2);
+
+  const std::vector<glm::vec3> vertices;
+  const std::vector<size_t> indices;
+
 private:
   const glm::quat getStandardOrientation() const;
-  const std::vector<glm::vec3> m_vertices;
-  const std::vector<size_t> m_indices;
   const float m_mass;
   const glm::mat3 m_Ibody;
   const glm::mat3 m_IbodyInv;

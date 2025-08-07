@@ -556,8 +556,8 @@ Pipeline Renderer::createGraphicPipeline(
         &vertexInputAttributeDescriptions,
     const VkPolygonMode &polygonMode, const VkCullModeFlags &cullMode,
     const std::vector<VkDescriptorSetLayout> &pipelineLayouts) {
-  std::vector<char> vertShaderCode = readFile(vertexShaderPath);
-  std::vector<char> fragShaderCode = readFile(fragmentShaderPath);
+  std::vector<char> vertShaderCode = util::readFile(vertexShaderPath);
+  std::vector<char> fragShaderCode = util::readFile(fragmentShaderPath);
 
   VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
   VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -1098,8 +1098,6 @@ void Renderer::initImGui() {
 
   ImGui_ImplVulkan_Init(&init_info);
 }
-
-
 
 void Renderer::drawScene() {
 
@@ -1789,7 +1787,7 @@ std::shared_ptr<Drawing> Renderer::loadModel(const Engine::MeshNode &meshNode) {
   }
   std::vector<VkDescriptorSetLayout> texturedLayouts = {
       m_mvpDescriptorSetLayout, m_textureDescriptorSetLayout};
-  //pipelines
+  // pipelines
   Pipeline pipelineTextured = createGraphicPipeline(
       "./shaders/" + std::string(TEXTURED_VERTEX_SHADER_NAME),
       "./shaders/" + std::string(TEXTURED_FRAGMENT_SHADER_NAME),

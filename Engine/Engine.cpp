@@ -6,13 +6,13 @@
 #include <chrono>
 namespace Engine {
 Entity::Entity(const std::shared_ptr<Renderer::Drawing> &drawing,
-               const Physics::Body &body)
+               const ph::Body &body)
     : drawing(drawing), body(body) {}
 
 void Entity::update() { drawing->setTranform(body.getTransform()); }
 void Engine::loadScene(const std::string &path) {
 
-  const tinygltf::Model &sceneModel = loadGltfFile(path);
+  const tinygltf::Model &sceneModel = util::loadGltfFile(path);
   const Scene scene(sceneModel);
   for (const std::shared_ptr<MeshNode> &meshNode : scene.getMeshNodes()) {
     auto drawing = renderer.loadModel(*meshNode);
