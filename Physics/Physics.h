@@ -2,12 +2,11 @@
 #include "Renderer.h"
 #include "glm/ext/vector_float3.hpp"
 #include "glm/fwd.hpp"
-#include <cstddef>
 #define GLM_ENABLE_EXPERIMENTAL
+#include "QuickHull.h"
 #include "glm/gtx/quaternion.hpp"
 #include <sys/wait.h>
 #include <vector>
-#include "Triangle.h"
 namespace ph {
 
 struct State {
@@ -18,8 +17,8 @@ struct State {
 };
 class RigidBody {
 public:
-  RigidBody(const std::vector<glm::vec3> &vertices,
-            const std::vector<size_t> &indexBuffer, const float &mass,
+  RigidBody(const RigidBody &rigidBody);
+  RigidBody(const QuickHull &hull, const float &mass,
             const glm::mat3 &Ibody = glm::mat3(0.0f),
             const glm::vec3 &initialPosition = glm::vec3(0.0f),
             const glm::quat &initialOrientation =
@@ -39,18 +38,7 @@ public:
   bool doesIntersect(const RigidBody &rigidBody) const;
   const glm::mat4 getTransform() const;
 
-  struct PlanePointCollision {
-    glm::vec3 point;
-    Triangle trianglePlane;
-  };
-  static std::vector<PlanePointCollision> planePointCollisions(
-      const std::vector<glm::vec3> &hullPoints1,
-      const std::vector<size_t> &hullIndices1, const glm::mat4 &tranform1,
-      const std::vector<glm::vec3> &hullPoints2,
-      const std::vector<size_t> &hullIndices2, const glm::mat4 &tranform2);
-
-  const std::vector<glm::vec3> vertices;
-  const std::vector<size_t> indices;
+  const QuickHull m_hull;
 
 private:
   const glm::quat getStandardOrientation() const;
@@ -110,4 +98,4 @@ private:
   const uint32_t m_index;
   RigidBodySystem &m_system;
 };
-} // namespace Physics
+} // namespace ph

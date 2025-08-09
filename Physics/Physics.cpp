@@ -8,13 +8,17 @@
 #include <sys/wait.h>
 namespace ph {
 
-RigidBody::RigidBody(const std::vector<glm::vec3> &vertices,
-                     const std::vector<size_t> &indexBuffer, const float &mass,
-                     const glm::mat3 &Ibody, const glm::vec3 &initialPosition,
+RigidBody::RigidBody(const RigidBody &rigidBody)
+    : RigidBody(rigidBody.m_hull, rigidBody.m_mass, rigidBody.m_Ibody,
+                rigidBody.m_position, rigidBody.m_orientation,
+                rigidBody.m_linearMomentum / rigidBody.m_mass,
+                rigidBody.m_IbodyInv * rigidBody.m_angularMomentum) {}
+RigidBody::RigidBody(const QuickHull &hull, const float &mass, const glm::mat3 &Ibody,
+                     const glm::vec3 &initialPosition,
                      const glm::quat &initialOrientation,
                      const glm::vec3 &initialVelocity,
                      const glm::vec3 &initialAngularVelocity)
-    : vertices(vertices), indices(indexBuffer), m_mass(mass), m_Ibody(Ibody),
+    : m_hull(hull), m_mass(mass), m_Ibody(Ibody),
       m_IbodyInv(glm::inverse(Ibody)), m_position(initialPosition),
       m_orientation(initialOrientation),
       m_linearMomentum(initialVelocity * m_mass),
@@ -64,14 +68,14 @@ glm::quat RigidBody::getOrientation() const {
 void RigidBody::setOrientation(const glm::quat &orientation) {
   m_orientation = orientation;
 }
-bool RigidBody::doesIntersect(const RigidBody &rigidBody) const {
-  glm::mat4 transform1 =
+bool RigidBody::doesIntersect(const RigidBody &thatRigidBody) const {
+  glm::mat4 thisTransform =
       glm::translate(glm::toMat4(getOrientation()), getPosition());
-  glm::mat4 transform2 = glm::translate(glm::toMat4(rigidBody.getOrientation()),
-                                        rigidBody.getPosition());
-  auto planePointCollisions = RigidBody::planePointCollisions(
-      vertices, indices, transform1, rigidBody.vertices, rigidBody.indices,
-      transform2);
+  glm::mat4 thatTransform = glm::translate(
+      glm::toMat4(thatRigidBody.getOrientation()), thatRigidBody.getPosition());
+  std::vector<PlanePointCollision> planePointCollisions =
+      m_hull.getPlanePointCollisions(thisTransform, thatRigidBody.m_hull,
+                                     thatTransform);
   if (planePointCollisions.size() == 0) {
     return false;
   } else {
@@ -83,62 +87,11 @@ const glm::mat4 RigidBody::getTransform() const {
   const glm::quat orientation = getOrientation();
   return glm::translate(glm::mat4_cast(orientation), getPosition());
 }
-std::vector<RigidBody::PlanePointCollision> RigidBody::planePointCollisions(
-    const std::vector<glm::vec3> &hullPoints1,
-    const std::vector<size_t> &hullIndices1, const glm::mat4 &tranform1,
-    const std::vector<glm::vec3> &hullPoints2,
-    const std::vector<size_t> &hullIndices2, const glm::mat4 &tranform2) {
-  std::vector<RigidBody::PlanePointCollision> collisions;
 
-  for (size_t i = 0; i < hullIndices1.size(); i += 3) {
-    glm::vec4 point1 = glm::vec4(hullPoints1.at(hullIndices1.at(i)), 1.0f);
-    glm::vec4 point2 = glm::vec4(hullPoints1.at(hullIndices1.at(i + 1)), 1.0f);
-    glm::vec4 point3 = glm::vec4(hullPoints1.at(hullIndices1.at(i + 2)), 1.0f);
-    point1 = tranform1 * point1;
-    point2 = tranform1 * point2;
-    point3 = tranform1 * point3;
-    ph::Triangle triangle1(point1, point2, point3);
-    glm::vec4 collisionPoint;
-    bool isTowards = true;
-    for (size_t j = 0; j < hullIndices2.size(); ++j) {
-      collisionPoint = glm::vec4(hullPoints2.at(hullIndices2.at(j)), 1.0f);
-      collisionPoint = tranform2 * collisionPoint;
-      if (!triangle1.isTowards(collisionPoint)) {
-        isTowards = false;
-      }
-    }
-    if (!isTowards) {
-      bool collision = true;
-      for (size_t j = 0; j < hullIndices1.size(); j += 3) {
-        if (j != i) {
-          glm::vec4 point1 =
-              glm::vec4(hullPoints1.at(hullIndices1.at(j)), 1.0f);
-          glm::vec4 point2 =
-              glm::vec4(hullPoints1.at(hullIndices1.at(j + 1)), 1.0f);
-          glm::vec4 point3 =
-              glm::vec4(hullPoints1.at(hullIndices1.at(j + 2)), 1.0f);
-          point1 = tranform1 * point1;
-          point2 = tranform1 * point2;
-          point3 = tranform1 * point3;
-          Triangle otherTriangle(point1, point2, point3);
-          if (otherTriangle.isTowards(collisionPoint)) {
-            collision = false;
-          }
-        }
-      }
-      if (collision) {
-        collisions.push_back(RigidBody::PlanePointCollision{
-            .point = collisionPoint, .trianglePlane = triangle1});
-      }
-    }
-  }
-  return collisions;
-}
 const glm::quat RigidBody::getStandardOrientation() const {
   return glm::rotate(glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::radians(90.0f),
                      glm::vec3(1.0f, 0.0f, 0.0f));
 }
-
 glm::mat3 RigidBody::getInertialTensor() const {
   glm::mat3 orientation = glm::mat3_cast(m_orientation);
   return orientation * m_Ibody * glm::transpose(orientation);
@@ -189,10 +142,6 @@ Body RigidBodySystem::addMesh(const Engine::MeshNode &meshNode,
     vectorData.push_back(glm::vec3(x, y, z));
   }
   ph::QuickHull qh(vectorData, meshNode.name);
-  qh.buildQuickHull();
-
-  const auto &vertexBuffer = qh.getVertexBuffer();
-  const auto &indexBuffer = qh.getIndexBuffer();
 
   std::vector<glm::vec3> vectorHull;
   const std::vector<float> positionBuffer = meshNode.meshData.position;
@@ -213,9 +162,9 @@ Body RigidBodySystem::addMesh(const Engine::MeshNode &meshNode,
   if (meshNode.mass != 0.0f) {
     meshMass = meshNode.mass;
   }
-  m_rigidBodies.push_back(RigidBody(
-      vectorHull, indexBuffer, meshMass, inertialTensor, meshNode.position,
-      meshNode.orientation, initialVelocity, initialAngularVelocity));
+  m_rigidBodies.push_back(RigidBody(qh, meshMass, inertialTensor,
+                                    meshNode.position, meshNode.orientation,
+                                    initialVelocity, initialAngularVelocity));
 
   return Body(m_rigidBodies.size() - 1, *this);
 }

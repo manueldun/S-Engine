@@ -71,6 +71,12 @@ Triangle::getFarthestPoint(const std::vector<glm::vec3> &points) const {
   }
   return furthest;
 }
+glm::vec3 Triangle::getNormal() const {
+
+  const glm::vec3 triangleEdge1 = m_vertex2 - m_vertex1;
+  const glm::vec3 triangleEdge2 = m_vertex3 - m_vertex1;
+  return glm::normalize(glm::cross(triangleEdge1, triangleEdge2));
+}
 const Triangle &Triangle::operator=(const Triangle &triangle) {
   return triangle;
 }
@@ -82,10 +88,16 @@ Triangle Triangle::getOpositeHandednesTriangle() const {
 
   return Triangle(m_vertex2, m_vertex1, m_vertex3);
 }
+Triangle Triangle::transform(const glm::mat4 &transform) const {
+  return Triangle(transform * glm::vec4(m_vertex1, 1.0f),
+                  transform * glm::vec4(m_vertex2, 1.0f),
+                  transform * glm::vec4(m_vertex3, 1.0f));
+}
 bool Triangle::isTowards(const glm::vec3 &point, const float &epsilon) const {
   const glm::vec3 triangleEdge1 = m_vertex2 - m_vertex1;
   const glm::vec3 triangleEdge2 = m_vertex3 - m_vertex1;
-  const glm::vec3 normal = glm::normalize(glm::cross(triangleEdge1, triangleEdge2));
+  const glm::vec3 normal =
+      glm::normalize(glm::cross(triangleEdge1, triangleEdge2));
   const float dotProduct = glm::dot(normal, point - m_vertex1);
   return dotProduct - epsilon > 0.0f;
 }

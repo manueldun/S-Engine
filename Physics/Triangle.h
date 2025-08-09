@@ -17,6 +17,7 @@ public:
   Triangle(const glm::vec3 &vertex1, const glm::vec3 &vertex2,
            const glm::vec3 &vertex3);
   Triangle getOpositeHandednesTriangle() const;
+  Triangle transform(const glm::mat4 &tranform) const;
   bool isTowards(const glm::vec3 &point, const float &epsilon = 0.0f) const;
   float getDistanceToPointFromPlane(const glm::vec3 &point) const;
   std::vector<glm::vec3>
@@ -24,7 +25,6 @@ public:
   std::optional<glm::vec3>
   getFurthestPointTowards(const std::vector<glm::vec3> &points) const;
   glm::vec3 getFarthestPoint(const std::vector<glm::vec3> &points) const;
-  std::array<glm::vec3, 3> getVertices() const;
   glm::vec3 getNormal() const;
   std::array<glm::vec3, 2> getEdge(const EdgeId &edgeId);
   float getVerticesElipson() const;

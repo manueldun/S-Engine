@@ -8,32 +8,43 @@
 #include <iostream>
 #endif // QUICK_HULL_DEBUG
 namespace ph {
-bool QhFace::isTowardsPoint(const glm::vec3 &point,
-                            const float &epsilon) const {
-  glm::vec3 point1 = edge->tail->position;
-  glm::vec3 point2 = edge->next->tail->position;
-  glm::vec3 point3 = edge->next->next->tail->position;
+HalfEdgeFace::HalfEdgeFace(const HalfEdgeFace &halfEdgeFace) {
+  m_conflictList = halfEdgeFace.m_conflictList;
+  m_visited = halfEdgeFace.m_visited;
+  std::list<HalfEdge *> newEdges;
+  for (HalfEdge *edge : halfEdgeFace.getEdges()) {
+    newEdges.push_back(new HalfEdge(this, new HalfEdgeVertex(*edge->m_tail)));
+  }
+  m_edge = newEdges.front();
+  HalfEdge::chainEdges(newEdges);
+}
+void HalfEdgeFace::setEdge(HalfEdge *edge) { m_edge = edge; }
+bool HalfEdgeFace::isTowardsPoint(const glm::vec3 &point,
+                                  const float &epsilon) const {
+  glm::vec3 point1 = m_edge->m_tail->position;
+  glm::vec3 point2 = m_edge->m_next->m_tail->position;
+  glm::vec3 point3 = m_edge->m_next->m_next->m_tail->position;
   Triangle triangle(point1, point2, point3);
   return triangle.isTowards(point, epsilon);
 }
-float QhFace::distanceToPoint(const glm::vec3 &point) const {
+float HalfEdgeFace::distanceToPoint(const glm::vec3 &point) const {
 
-  glm::vec3 point1 = edge->tail->position;
-  glm::vec3 point2 = edge->next->tail->position;
-  glm::vec3 point3 = edge->next->next->tail->position;
+  glm::vec3 point1 = m_edge->m_tail->position;
+  glm::vec3 point2 = m_edge->m_next->m_tail->position;
+  glm::vec3 point3 = m_edge->m_next->m_next->m_tail->position;
   Triangle triangle(point1, point2, point3);
   return triangle.getDistanceToPointFromPlane(point);
 }
 
-glm::vec3 QhFace::getFurtherVertex() const {
-  glm::vec3 point1 = edge->tail->position;
-  glm::vec3 point2 = edge->next->tail->position;
-  glm::vec3 point3 = edge->next->next->tail->position;
+glm::vec3 HalfEdgeFace::getFurtherVertex() const {
+  glm::vec3 point1 = m_edge->m_tail->position;
+  glm::vec3 point2 = m_edge->m_next->m_tail->position;
+  glm::vec3 point3 = m_edge->m_next->m_next->m_tail->position;
   Triangle triangle(point1, point2, point3);
-  glm::vec3 further = conflictList.front();
+  glm::vec3 further = m_conflictList.front();
 
   float maxDistance = triangle.getDistanceToPointFromPlane(further);
-  for (const glm::vec3 &vertex : conflictList) {
+  for (const glm::vec3 &vertex : m_conflictList) {
 
     float distance = triangle.getDistanceToPointFromPlane(vertex);
     if (maxDistance < distance) {
@@ -44,32 +55,65 @@ glm::vec3 QhFace::getFurtherVertex() const {
   return further;
 }
 
-void QhFace::printVertices() const {
-  QhHalfEdge *currentEdge = edge;
-  QhHalfEdge *initialEdge = edge;
+void HalfEdgeFace::printVertices() const {
+  HalfEdge *currentEdge = m_edge;
+  HalfEdge *initialEdge = m_edge;
   do {
-    std::cout << "v " << currentEdge->tail->position.x << " "
-              << currentEdge->tail->position.y << " "
-              << currentEdge->tail->position.z << std::endl;
-    currentEdge = currentEdge->next;
+    std::cout << "v " << currentEdge->m_tail->position.x << " "
+              << currentEdge->m_tail->position.y << " "
+              << currentEdge->m_tail->position.z << std::endl;
+    currentEdge = currentEdge->m_next;
   } while (currentEdge != initialEdge);
 }
 
-std::list<QhHalfEdge *> QhFace::getEdges() const {
-  QhHalfEdge *currentEdge = edge;
-  QhHalfEdge *firstEdge = edge;
-  std::list<QhHalfEdge *> edges;
+std::list<HalfEdge *> HalfEdgeFace::getEdges() const {
+  HalfEdge *currentEdge = m_edge;
+  HalfEdge *firstEdge = m_edge;
+  std::list<HalfEdge *> edges;
   do {
 
     edges.push_back(currentEdge);
-    currentEdge = currentEdge->next;
+    currentEdge = currentEdge->m_next;
   } while (firstEdge != currentEdge);
   return edges;
 }
-glm::vec3 QhVertex::getFarthestFromLine(const glm::vec3 &linePoint1,
-                                        const glm::vec3 &linePoint2,
-                                        const std::list<glm::vec3> &qhVertices,
-                                        const float &epsilon) {
+Triangle HalfEdgeFace::getTrianglePlane() const {
+
+  std::list<HalfEdge *> thisEdges = getEdges();
+  std::vector<glm::vec3> thisVertices;
+  for (HalfEdge *edge : thisEdges) {
+    thisVertices.push_back(edge->m_tail->position);
+  }
+  return Triangle(thisVertices.at(0), thisVertices.at(1), thisVertices.at(2));
+}
+bool HalfEdgeFace::hasConflictPoint() const {
+  return m_conflictList.size() != 0;
+}
+HalfEdge::HalfEdge(HalfEdgeFace *face, HalfEdgeVertex *tail)
+    : m_face(face), m_tail(tail) {}
+void HalfEdge::setFace(HalfEdgeFace *face) { m_face = face; }
+void HalfEdge::setNext(HalfEdge *next) { m_next = next; }
+void HalfEdge::setPrevious(HalfEdge *previous) { m_previous = previous; }
+glm::vec3 HalfEdge::getTail() const { return m_tail->position; }
+glm::vec3 HalfEdge::getHead() const { return m_next->m_tail->position; }
+Triangle HalfEdge::getTrianglePlane() const {
+  return m_face->getTrianglePlane();
+}
+void HalfEdge::chainEdges(const std::list<HalfEdge *> edges) {
+  for (auto it = edges.begin(); it != edges.end(); ++it) {
+    if (it != edges.begin()) {
+      (*it)->m_previous = *(--it);
+    }
+    if (it != edges.end()) {
+      (*it)->m_next = *(++it);
+    }
+  }
+  edges.front()->m_previous = edges.back();
+  edges.back()->m_next = edges.front();
+}
+glm::vec3 HalfEdgeVertex::getFarthestFromLine(
+    const glm::vec3 &linePoint1, const glm::vec3 &linePoint2,
+    const std::list<glm::vec3> &qhVertices, const float &epsilon) {
 
   glm::vec3 farthestPoint = qhVertices.front();
   glm::vec3 numeratorVec =
@@ -88,19 +132,24 @@ glm::vec3 QhVertex::getFarthestFromLine(const glm::vec3 &linePoint1,
   return farthestPoint;
 }
 
-glm::vec3 QhVertex::getFarthestTowardsTriangle(const glm::vec3 &vertex1,
-                                               const glm::vec3 &vertex2,
-                                               const glm::vec3 &vertex3,
-                                               std::vector<glm::vec3> &vertices,
-                                               const float &epsilon) {
+HalfEdgeVertex::HalfEdgeVertex(const HalfEdgeVertex &halfEdgeVertex)
+    : position(halfEdgeVertex.position) {
+  m_edge = halfEdgeVertex.m_edge;
+}
+HalfEdgeVertex::HalfEdgeVertex(const glm::vec3 &vertex) { position = vertex; }
+void HalfEdgeVertex::setEdge(HalfEdge *edge) { m_edge = edge; }
+glm::vec3 HalfEdgeVertex::getFarthestTowardsTriangle(
+    const glm::vec3 &vertex1, const glm::vec3 &vertex2,
+    const glm::vec3 &vertex3, std::vector<glm::vec3> &vertices,
+    const float &epsilon) {
 
   glm::vec3 furthest = vertices.front();
 
-  float maxDistance = QhVertex::getDistancefromTriangle(
+  float maxDistance = HalfEdgeVertex::getDistancefromTriangle(
       vertex1, vertex2, vertex3, furthest, epsilon);
   for (glm::vec3 &qhVertex : vertices) {
 
-    float distanceFromPoint = QhVertex::getDistancefromTriangle(
+    float distanceFromPoint = HalfEdgeVertex::getDistancefromTriangle(
         vertex1, vertex2, vertex3, qhVertex, epsilon);
     if (maxDistance < distanceFromPoint) {
       maxDistance = distanceFromPoint;
@@ -109,19 +158,19 @@ glm::vec3 QhVertex::getFarthestTowardsTriangle(const glm::vec3 &vertex1,
   }
   return furthest;
 }
-glm::vec3 QhVertex::getFarthestFromTriangle(
+glm::vec3 HalfEdgeVertex::getFarthestFromTriangle(
     const glm::vec3 &vertex1, const glm::vec3 &vertex2,
     const glm::vec3 &vertex3, const std::list<glm::vec3> &vertices,
     const float &epsilon) {
 
   glm::vec3 furthest = vertices.front();
 
-  float maxDistance = QhVertex::getDistancefromTriangle(
+  float maxDistance = HalfEdgeVertex::getDistancefromTriangle(
       vertex1, vertex2, vertex3, furthest, epsilon);
   maxDistance = glm::abs(maxDistance);
   for (glm::vec3 qhVertex : vertices) {
 
-    float distanceFromPoint = glm::abs(QhVertex::getDistancefromTriangle(
+    float distanceFromPoint = glm::abs(HalfEdgeVertex::getDistancefromTriangle(
         vertex1, vertex2, vertex3, qhVertex, epsilon));
     if (maxDistance < distanceFromPoint) {
       maxDistance = distanceFromPoint;
@@ -130,11 +179,11 @@ glm::vec3 QhVertex::getFarthestFromTriangle(
   }
   return furthest;
 }
-float QhVertex::getDistancefromTriangle(const glm::vec3 &vertex1,
-                                        const glm::vec3 &vertex2,
-                                        const glm::vec3 &vertex3,
-                                        const glm::vec3 &point,
-                                        const float &epsilon) {
+float HalfEdgeVertex::getDistancefromTriangle(const glm::vec3 &vertex1,
+                                              const glm::vec3 &vertex2,
+                                              const glm::vec3 &vertex3,
+                                              const glm::vec3 &point,
+                                              const float &epsilon) {
 
   const glm::vec3 edge1 = vertex2 - vertex1;
   const glm::vec3 edge2 = vertex3 - vertex1;
@@ -148,18 +197,86 @@ Mesh::Mesh(const std::vector<glm::vec3> &vertices,
 
 QuickHull::QuickHull(const std::vector<glm::vec3> &vertices,
                      const std::string &name)
-    : vertices(vertices), epsilon(calculateEpsilon()), m_name(name) {}
+    : m_vertices(vertices), m_epsilon(calculateEpsilon()), m_name(name) {
+  buildQuickHull();
+}
+
+QuickHull::QuickHull(const QuickHull &quickHull)
+    : m_vertices(quickHull.m_vertices), m_epsilon(quickHull.m_epsilon),
+      m_name(quickHull.m_name) {
+
+  m_halfEdgeVertices = quickHull.m_halfEdgeVertices;
+  std::map<const HalfEdgeVertex *, HalfEdgeVertex *> vertexMap;
+  auto thisIter = m_halfEdgeVertices.begin();
+  auto thatIter = quickHull.m_halfEdgeVertices.begin();
+  while (thisIter != m_halfEdgeVertices.end()) {
+    HalfEdgeVertex *thisVertex = &(*thisIter);
+    const HalfEdgeVertex *thatVertex = &(*thatIter);
+    vertexMap[thatVertex] = thisVertex;
+    ++thisIter;
+    ++thatIter;
+  }
+  std::map<const HalfEdge *, HalfEdge *> edgeMap;
+  std::map<const HalfEdgeFace *, HalfEdgeFace *> faceMap;
+  for (HalfEdgeFace *face : quickHull.m_hullHalEdgeFacesPtr) {
+    if (!faceMap.contains(face)) {
+      HalfEdgeFace *newFace = new HalfEdgeFace();
+      m_hullHalEdgeFacesPtr.push_back(newFace);
+      faceMap[face] = newFace;
+    }
+    for (HalfEdge *edge : face->getEdges()) {
+      HalfEdge *newEdge = new HalfEdge();
+      m_hullHalfEdgesPtr.push_back(newEdge);
+      edgeMap[edge] = newEdge;
+    }
+  }
+  for (HalfEdgeFace *face : quickHull.m_hullHalEdgeFacesPtr) {
+    faceMap[face]->m_edge = edgeMap[face->m_edge];
+  }
+  for (const HalfEdgeVertex &vertex : quickHull.m_halfEdgeVertices) {
+
+    vertexMap[&vertex]->m_edge = edgeMap[vertex.m_edge];
+  }
+  for (HalfEdge *edge : quickHull.m_hullHalfEdgesPtr) {
+    edgeMap[edge]->m_tail = vertexMap[edge->m_tail];
+    edgeMap[edge]->m_next = edgeMap[edge->m_next];
+    edgeMap[edge]->m_previous = edgeMap[edge->m_previous];
+    edgeMap[edge]->m_twin = edgeMap[edge->m_twin];
+  }
+}
+QuickHull::~QuickHull() {
+  for (HalfEdge *edge : m_hullHalfEdgesPtr) {
+    delete edge;
+  }
+  for (HalfEdgeFace *face : m_hullHalEdgeFacesPtr) {
+    delete face;
+  }
+}
+QuickHull &QuickHull::operator=(const QuickHull &quickHull) {
+  for (HalfEdgeFace *face : quickHull.m_hullHalEdgeFacesPtr) {
+    m_hullHalEdgeFacesPtr.push_back(new HalfEdgeFace(*face));
+  }
+  for (HalfEdgeFace *face : m_hullHalEdgeFacesPtr) {
+    for (HalfEdge *edge : face->getEdges()) {
+      m_hullHalfEdgesPtr.push_back(edge);
+    }
+  }
+  m_halfEdgeVertices = quickHull.m_halfEdgeVertices;
+  m_hullVertices = quickHull.m_hullVertices;
+  m_hullIndices = quickHull.m_hullIndices;
+  return *this;
+}
 
 void QuickHull::buildQuickHull() {
 
   buildInitialHull();
   int iteration = 1;
   printToObj(m_name + std::to_string(0));
-  QhFace *nextFace = nullptr;
+  HalfEdgeFace *nextFace = nullptr;
   do {
     nextFace = nullptr;
-    for (QhFace *face : qhFaceHullSet) {
-      if (face->conflictList.size() > 0) {
+    for (HalfEdgeFace *face : m_hullHalEdgeFacesPtr) {
+      if (face->hasConflictPoint()) {
         nextFace = face;
         break;
       }
@@ -168,13 +285,12 @@ void QuickHull::buildQuickHull() {
       glm::vec3 furthestVertex = nextFace->getFurtherVertex();
       std::cout << "#New Point: " << furthestVertex.x << "," << furthestVertex.y
                 << "," << furthestVertex.z << "," << std::endl;
-      std::list<QhHalfEdge *> horizon = getHorizon(nextFace, furthestVertex);
+      std::list<HalfEdge *> horizon = getHorizon(nextFace, furthestVertex);
       assert(horizon.size() >= 3);
       std::cout << "#horizon:" << std::endl;
-      for (QhHalfEdge *edge : horizon) {
-        std::cout << "#(" << edge->tail->position.x << ","
-                  << edge->tail->position.y << "," << edge->tail->position.z
-                  << ")" << std::endl;
+      for (HalfEdge *edge : horizon) {
+        std::cout << "#(" << edge->getTail().x << "," << edge->getTail().y
+                  << "," << edge->getTail().z << ")" << std::endl;
       }
       mergeHullToHorizon(horizon, furthestVertex);
       printToObj(m_name + std::to_string(iteration));
@@ -186,66 +302,123 @@ void QuickHull::buildQuickHull() {
 
 std::vector<glm::vec3> QuickHull::getVertexBuffer() { return m_hullVertices; }
 std::vector<size_t> QuickHull::getIndexBuffer() { return m_hullIndices; }
+
+std::vector<PlanePointCollision>
+QuickHull::getPlanePointCollisions(const glm::mat4 &thisTransform,
+                                   const QuickHull &thatHull,
+                                   const glm::mat4 &thatTransform) const {
+  std::vector<PlanePointCollision> collisions;
+
+  for (HalfEdgeFace *thisFace : m_hullHalEdgeFacesPtr) {
+
+    Triangle thisTriangle =
+        thisFace->getTrianglePlane().transform(thisTransform);
+
+    bool isInside = true;
+    glm::vec3 thatVertex;
+    for (const HalfEdgeVertex &thatQhVertex : thatHull.m_halfEdgeVertices) {
+
+      thatVertex = thatTransform * glm::vec4(thatQhVertex.position, 1.0f);
+
+      if (thisTriangle.isTowards(thatVertex, 0.0f)) {
+
+        isInside = false;
+        break;
+      }
+    }
+    if (isInside) {
+      collisions.push_back(PlanePointCollision{.point = thatVertex,
+                                               .trianglePlane = thisTriangle});
+    }
+  }
+  return collisions;
+}
+std::vector<EdgeEdgeCollision>
+QuickHull::getEdgeEdgeCollisions(const glm::mat4 &thisTransform,
+                                 const QuickHull &thatHull,
+                                 const glm::mat4 &thatTransform) const {
+  std::vector<EdgeEdgeCollision> collisions;
+  for (HalfEdge *thatEdge : thatHull.m_hullHalfEdgesPtr) {
+    std::array<glm::vec3, 2> thatEdgePoints = {thatEdge->getTail(),
+                                               thatEdge->getHead()};
+    bool isInside = true;
+    std::array<glm::vec3, 2> thisEdgePoints;
+    for (HalfEdge *thisEdge : m_hullHalfEdgesPtr) {
+      thisEdgePoints = {thisEdge->getTail(), thisEdge->getHead()};
+      glm::vec3 normal = thisEdge->m_face->getTrianglePlane()
+                             .transform(thisTransform)
+                             .getNormal();
+      glm::vec3 normalTwin = thisEdge->m_twin->m_face->getTrianglePlane()
+                                 .transform(thisTransform)
+                                 .getNormal();
+      glm::vec3 thisEdgeNormal = (normal + normalTwin) / 2.0f;
+      float dotProduct = glm::dot(
+          thisEdgeNormal, thatEdgePoints.at(0) - thisEdge->m_tail->position);
+      if (dotProduct > 0.0f) {
+        isInside = false;
+        break;
+      }
+    }
+    if (isInside) {
+      collisions.push_back(
+          EdgeEdgeCollision{.edge1 = thisEdgePoints, .edge2 = thatEdgePoints});
+    }
+  }
+  return collisions;
+}
 void QuickHull::createMesh() {
-  std::map<QhVertex *, size_t> indicesMap;
+  std::map<const HalfEdgeVertex *const, size_t> indicesMap;
   size_t index = 0;
-  for (const QhFace &face : qhHullFaces) {
-    std::list<QhHalfEdge*> edges = face.getEdges();
-    assert(edges.size()==3);
-    for(QhHalfEdge* edge:edges){
-      if (!indicesMap.contains(edge->tail)) {
-        indicesMap[edge->tail] = index;
+  for (const HalfEdgeFace *face : m_hullHalEdgeFacesPtr) {
+    std::list<HalfEdge *> edges = face->getEdges();
+    assert(edges.size() == 3);
+    for (const HalfEdge *const edge : edges) {
+      if (!indicesMap.contains(edge->m_tail)) {
+        indicesMap[edge->m_tail] = index;
         m_hullIndices.push_back(index);
         index++;
-      }
-      else{
-        m_hullIndices.push_back(indicesMap.at(edge->tail));
+      } else {
+        m_hullIndices.push_back(indicesMap.at(edge->m_tail));
       }
     }
   }
-  for (const QhVertex &vertex : qhVertices) {
+  for (const HalfEdgeVertex &vertex : m_halfEdgeVertices) {
     m_hullVertices.push_back(vertex.position);
   }
 }
-void QuickHull::mergeHullToHorizon(std::list<QhHalfEdge *> horizon,
+void QuickHull::mergeHullToHorizon(std::list<HalfEdge *> horizon,
                                    const glm::vec3 &point) {
-  QhHalfEdge *previousHalfEdge = nullptr;
-  QhHalfEdge *firstHalfEdge = nullptr;
-  QhHalfEdge *firstHalfEdgeTwin = nullptr;
-  std::list<QhFace *> newFaces;
-  qhVertices.emplace_back();
-  qhVertices.back().position = point;
-  std::vector<QhFace *> debugNewFaces;
-  for (QhHalfEdge *horizonEdge : horizon) {
-    qhHullFaces.emplace_back();
-    QhFace *currentFace = &qhHullFaces.back();
-    qhFaceHullSet.push_back(currentFace);
+  HalfEdge *previousHalfEdge = nullptr;
+  HalfEdge *firstHalfEdge = nullptr;
+  HalfEdge *firstHalfEdgeTwin = nullptr;
+  std::list<HalfEdgeFace *> newFaces;
+
+  m_halfEdgeVertices.push_back(HalfEdgeVertex(point));
+  std::vector<HalfEdgeFace *> debugNewFaces;
+  for (HalfEdge *horizonEdge : horizon) {
+    HalfEdgeFace *currentFace = new HalfEdgeFace();
+    m_hullHalEdgeFacesPtr.push_back(currentFace);
     debugNewFaces.push_back(currentFace);
     newFaces.push_back(currentFace);
-    qhHalfHullEdges.emplace_back();
-    QhHalfEdge *edge1 = &qhHalfHullEdges.back();
-    qhHalfHullEdges.emplace_back();
-    currentFace->edge = edge1;
-    QhHalfEdge *edge2 = &qhHalfHullEdges.back();
-    qhHalfHullEdges.emplace_back();
-    QhHalfEdge *edge3 = &qhHalfHullEdges.back();
-    horizonEdge->twin = edge1;
-    edge1->twin = horizonEdge; // continue
-    edge1->tail = horizonEdge->next->tail;
-    edge2->tail = horizonEdge->tail;
-    edge3->tail = &qhVertices.back();
-    edge1->face = currentFace;
-    edge2->face = currentFace;
-    edge3->face = currentFace;
-    edge1->next = edge2;
-    edge2->next = edge3;
-    edge3->next = edge1;
-    edge1->previous = edge3;
-    edge2->previous = edge1;
-    edge3->previous = edge2;
+    HalfEdge *edge1 = new HalfEdge(currentFace, horizonEdge->m_next->m_tail);
+    currentFace->setEdge(edge1);
+    HalfEdge *edge2 = new HalfEdge(currentFace, horizonEdge->m_tail);
+    HalfEdge *edge3 = new HalfEdge(currentFace, &m_halfEdgeVertices.back());
+    m_hullHalfEdgesPtr.push_back(edge1);
+    m_hullHalfEdgesPtr.push_back(edge2);
+    m_hullHalfEdgesPtr.push_back(edge3);
+    horizonEdge->m_twin = edge1;
+    edge1->m_twin = horizonEdge;
+    currentFace->m_edge = edge1;
+    edge1->setNext(edge2);
+    edge2->setNext(edge3);
+    edge3->setNext(edge1);
+    edge1->setPrevious(edge3);
+    edge2->setPrevious(edge1);
+    edge3->setPrevious(edge2);
     if (previousHalfEdge != nullptr) {
-      edge3->twin = previousHalfEdge;
-      previousHalfEdge->twin = edge3;
+      edge3->m_twin = previousHalfEdge;
+      previousHalfEdge->m_twin = edge3;
     }
     if (firstHalfEdge == nullptr) {
       firstHalfEdge = edge3;
@@ -253,70 +426,74 @@ void QuickHull::mergeHullToHorizon(std::list<QhHalfEdge *> horizon,
     previousHalfEdge = edge2;
     firstHalfEdgeTwin = edge2;
   }
-  firstHalfEdge->twin = firstHalfEdgeTwin;
-  firstHalfEdgeTwin->twin = firstHalfEdge;
-  for (QhFace *face : debugNewFaces) {
+  firstHalfEdge->m_twin = firstHalfEdgeTwin;
+  firstHalfEdgeTwin->m_twin = firstHalfEdge;
+  for (HalfEdgeFace *face : debugNewFaces) {
     std::cout << "#New Face:" << std::endl;
-      std::cout << "#(" << face->edge->tail->position.x << ","
-                << face->edge->tail->position.y << "," << face->edge->tail->position.z
-                << ")" << std::endl;
-      std::cout << "#(" << face->edge->next->tail->position.x << ","
-                << face->edge->next->tail->position.y << ","
-                << face->edge->next->tail->position.z << ")" << std::endl;
-      std::cout << "#(" << face->edge->next->next->tail->position.x << ","
-                <<face->edge->next->next->tail->position.y << ","
-                <<face->edge->next->next->tail->position.z << ")" << std::endl;
+    std::cout << "#(" << face->m_edge->m_tail->position.x << ","
+              << face->m_edge->m_tail->position.y << ","
+              << face->m_edge->m_tail->position.z << ")" << std::endl;
+    std::cout << "#(" << face->m_edge->m_next->m_tail->position.x << ","
+              << face->m_edge->m_next->m_tail->position.y << ","
+              << face->m_edge->m_next->m_tail->position.z << ")" << std::endl;
+    std::cout << "#(" << face->m_edge->m_next->m_next->m_tail->position.x << ","
+              << face->m_edge->m_next->m_next->m_tail->position.y << ","
+              << face->m_edge->m_next->m_next->m_tail->position.z << ")"
+              << std::endl;
 
-      std::cout << "\t#Twin 1:" << std::endl;
-      for (QhHalfEdge *twinEdge : face->edge->twin->face->getEdges()) {
-        std::cout << "\t#(" << twinEdge->tail->position.x << ","
-                  << twinEdge->tail->position.y << ","
-                  << twinEdge->tail->position.z << ")" << std::endl;
-      }
-      std::cout << "\t#Twin 2:" << std::endl;
-      for (QhHalfEdge *twinEdge : face->edge->next->twin->face->getEdges()) {
-        std::cout << "\t#(" << twinEdge->tail->position.x << ","
-                  << twinEdge->tail->position.y << ","
-                  << twinEdge->tail->position.z << ")" << std::endl;
-      }
-      std::cout << "\t#Twin 3:" << std::endl;
-      for (QhHalfEdge *twinEdge : face->edge->next->next->twin->face->getEdges()) {
-        std::cout << "\t#(" << twinEdge->tail->position.x << ","
-                  << twinEdge->tail->position.y << ","
-                  << twinEdge->tail->position.z << ")" << std::endl;
-      }
+    std::cout << "\t#Twin 1:" << std::endl;
+    for (HalfEdge *twinEdge : face->m_edge->m_twin->m_face->getEdges()) {
+      std::cout << "\t#(" << twinEdge->m_tail->position.x << ","
+                << twinEdge->m_tail->position.y << ","
+                << twinEdge->m_tail->position.z << ")" << std::endl;
+    }
+    std::cout << "\t#Twin 2:" << std::endl;
+    for (HalfEdge *twinEdge :
+         face->m_edge->m_next->m_twin->m_face->getEdges()) {
+      std::cout << "\t#(" << twinEdge->m_tail->position.x << ","
+                << twinEdge->m_tail->position.y << ","
+                << twinEdge->m_tail->position.z << ")" << std::endl;
+    }
+    std::cout << "\t#Twin 3:" << std::endl;
+    for (HalfEdge *twinEdge :
+         face->m_edge->m_next->m_next->m_twin->m_face->getEdges()) {
+      std::cout << "\t#(" << twinEdge->m_tail->position.x << ","
+                << twinEdge->m_tail->position.y << ","
+                << twinEdge->m_tail->position.z << ")" << std::endl;
+    }
   }
 
-  std::vector<QhHalfEdge *> edgesToErase;
-  for (auto it = qhFaceHullSet.begin(); it != qhFaceHullSet.end();) {
-    QhFace *face = *it;
-    if (face->visited) {
-      QhHalfEdge *currentEdge = face->edge;
-      QhHalfEdge *startEdge = face->edge;
+  std::vector<HalfEdge *> edgesToErase;
+  for (auto it = m_hullHalEdgeFacesPtr.begin();
+       it != m_hullHalEdgeFacesPtr.end();) {
+    HalfEdgeFace *face = *it;
+    if (face->m_visited) {
+      HalfEdge *currentEdge = face->m_edge;
+      HalfEdge *startEdge = face->m_edge;
       do {
         edgesToErase.push_back(currentEdge);
-        currentEdge = currentEdge->next;
+        currentEdge = currentEdge->m_next;
 
       } while (currentEdge != startEdge);
-      it = qhFaceHullSet.erase(it);
+      it = m_hullHalEdgeFacesPtr.erase(it);
     } else {
       ++it;
     }
   }
-  for (auto it = qhHalfEdgeHullSet.begin(); it != qhHalfEdgeHullSet.end();) {
-    for (QhHalfEdge *edge : edgesToErase) {
-      if (edge == *it) {
-        it = qhHalfEdgeHullSet.erase(it);
-      } else {
-        ++it;
+  for (auto it = m_hullHalfEdgesPtr.begin(); it != m_hullHalfEdgesPtr.end();) {
+    auto halfEdgeIt = it;
+    ++it;
+    for (HalfEdge *edgeToErase : edgesToErase) {
+      if (*halfEdgeIt == edgeToErase) {
+        m_hullHalfEdgesPtr.erase(halfEdgeIt);
       }
     }
   }
-  for (QhFace *face : newFaces) {
-    for (glm::vec3 &vertex : vertices) {
+  for (HalfEdgeFace *face : newFaces) {
+    for (const glm::vec3 &vertex : m_vertices) {
       float distance = face->distanceToPoint(vertex);
-      if (distance > epsilon) {
-        face->conflictList.push_back(vertex);
+      if (distance > m_epsilon) {
+        face->m_conflictList.push_back(vertex);
       }
     }
   }
@@ -327,23 +504,15 @@ void QuickHull::mergeHullToHorizon(std::list<QhHalfEdge *> horizon,
 #endif // QUICK_HULL_DEBUG
 }
 
-QhFace *QuickHull::getUnvisitedFace() {
-  for (QhFace &face : qhHullFaces) {
-    if (!face.visited) {
-      return &face;
-    }
-  }
-  return nullptr;
-}
 void QuickHull::printToObj(const std::string &name) {
   std::cout << "o " << name << std::endl;
   std::vector<std::vector<int>> faces;
-  std::map<QhVertex *, int> indicesMap;
+  std::map<HalfEdgeVertex *, int> indicesMap;
   std::vector<glm::vec3> vertices;
   static int vertexIndex = 1;
-  for (const QhFace *face : qhFaceHullSet) {
+  for (const HalfEdgeFace *face : m_hullHalEdgeFacesPtr) {
 
-    QhVertex *vertex = face->edge->tail;
+    HalfEdgeVertex *vertex = face->m_edge->m_tail;
     std::vector<int> faceIndices;
     if (indicesMap.contains(vertex)) {
       faceIndices.push_back(indicesMap.at(vertex));
@@ -353,7 +522,7 @@ void QuickHull::printToObj(const std::string &name) {
       vertexIndex++;
       vertices.push_back(vertex->position);
     }
-    vertex = face->edge->next->tail;
+    vertex = face->m_edge->m_next->m_tail;
     if (indicesMap.contains(vertex)) {
       faceIndices.push_back(indicesMap.at(vertex));
     } else {
@@ -362,7 +531,7 @@ void QuickHull::printToObj(const std::string &name) {
       vertexIndex++;
       vertices.push_back(vertex->position);
     }
-    vertex = face->edge->next->next->tail;
+    vertex = face->m_edge->m_next->m_next->m_tail;
     if (indicesMap.contains(vertex)) {
       faceIndices.push_back(indicesMap.at(vertex));
     } else {
@@ -428,38 +597,38 @@ void QuickHull::buildInitialHull() {
   std::cout << "Start of initial Hull" << std::endl;
 #endif // QUICK_HULL_DEBUG
 
-  glm::vec3 farthestXPositive = vertices.front();
-  for (const glm::vec3 &vertex : vertices) {
+  glm::vec3 farthestXPositive = m_vertices.front();
+  for (const glm::vec3 &vertex : m_vertices) {
     if (vertex.x > farthestXPositive.x) {
       farthestXPositive = vertex;
     }
   }
-  glm::vec3 farthestXNegative = vertices.front();
-  for (const glm::vec3 &vertex : vertices) {
+  glm::vec3 farthestXNegative = m_vertices.front();
+  for (const glm::vec3 &vertex : m_vertices) {
     if (vertex.x < farthestXNegative.x) {
       farthestXNegative = vertex;
     }
   }
-  glm::vec3 farthestYPositive = vertices.front();
-  for (const glm::vec3 &vertex : vertices) {
+  glm::vec3 farthestYPositive = m_vertices.front();
+  for (const glm::vec3 &vertex : m_vertices) {
     if (vertex.y > farthestYPositive.y) {
       farthestYPositive = vertex;
     }
   }
-  glm::vec3 farthestYNegative = vertices.front();
-  for (const glm::vec3 &vertex : vertices) {
+  glm::vec3 farthestYNegative = m_vertices.front();
+  for (const glm::vec3 &vertex : m_vertices) {
     if (vertex.y < farthestYNegative.y) {
       farthestYNegative = vertex;
     }
   }
-  glm::vec3 farthestZPositive = vertices.front();
-  for (const glm::vec3 &vertex : vertices) {
+  glm::vec3 farthestZPositive = m_vertices.front();
+  for (const glm::vec3 &vertex : m_vertices) {
     if (vertex.z > farthestZPositive.z) {
       farthestZPositive = vertex;
     }
   }
-  glm::vec3 farthestZNegative = vertices.front();
-  for (const glm::vec3 &vertex : vertices) {
+  glm::vec3 farthestZNegative = m_vertices.front();
+  for (const glm::vec3 &vertex : m_vertices) {
     if (vertex.z < farthestYNegative.z) {
       farthestZNegative = vertex;
     }
@@ -477,43 +646,39 @@ void QuickHull::buildInitialHull() {
 
     std::list<glm::vec3> qhVert = {farthestYPositive, farthestYNegative,
                                    farthestZPositive, farthestZNegative};
-    thirdVertex = QhVertex::getFarthestFromLine(firstVertex, secondVertex,
-                                                qhVert, epsilon);
-    fourthVertex = QhVertex::getFarthestFromTriangle(
-        firstVertex, secondVertex, thirdVertex, qhVert, epsilon);
+    thirdVertex = HalfEdgeVertex::getFarthestFromLine(firstVertex, secondVertex,
+                                                      qhVert, m_epsilon);
+    fourthVertex = HalfEdgeVertex::getFarthestFromTriangle(
+        firstVertex, secondVertex, thirdVertex, qhVert, m_epsilon);
 
   } else if (maxY > maxX && maxY > maxZ) {
     firstVertex = farthestYPositive;
     secondVertex = farthestYNegative;
     std::list<glm::vec3> qhVert = {farthestXPositive, farthestXNegative,
                                    farthestZPositive, farthestZNegative};
-    thirdVertex = QhVertex::getFarthestFromLine(firstVertex, secondVertex,
-                                                qhVert, epsilon);
-    fourthVertex = QhVertex::getFarthestFromTriangle(
-        firstVertex, secondVertex, thirdVertex, qhVert, epsilon);
+    thirdVertex = HalfEdgeVertex::getFarthestFromLine(firstVertex, secondVertex,
+                                                      qhVert, m_epsilon);
+    fourthVertex = HalfEdgeVertex::getFarthestFromTriangle(
+        firstVertex, secondVertex, thirdVertex, qhVert, m_epsilon);
   } else {
     firstVertex = farthestZPositive;
     secondVertex = farthestZNegative;
     std::list<glm::vec3> qhVert = {farthestXPositive, farthestXNegative,
                                    farthestYPositive, farthestYNegative};
-    thirdVertex = QhVertex::getFarthestFromLine(firstVertex, secondVertex,
-                                                qhVert, epsilon);
-    fourthVertex = QhVertex::getFarthestFromTriangle(
-        firstVertex, secondVertex, thirdVertex, qhVert, epsilon);
+    thirdVertex = HalfEdgeVertex::getFarthestFromLine(firstVertex, secondVertex,
+                                                      qhVert, m_epsilon);
+    fourthVertex = HalfEdgeVertex::getFarthestFromTriangle(
+        firstVertex, secondVertex, thirdVertex, qhVert, m_epsilon);
   }
 
-  qhVertices.emplace_back();
-  qhVertices.back().position = firstVertex;
-  QhVertex *firstQhVertex = &qhVertices.back();
-  qhVertices.emplace_back();
-  qhVertices.back().position = secondVertex;
-  QhVertex *secondQhVertex = &qhVertices.back();
-  qhVertices.emplace_back();
-  qhVertices.back().position = thirdVertex;
-  QhVertex *thirdQhVertex = &qhVertices.back();
-  qhVertices.emplace_back();
-  qhVertices.back().position = fourthVertex;
-  QhVertex *fourthQhVertex = &qhVertices.back();
+  m_halfEdgeVertices.push_back(HalfEdgeVertex(firstVertex));
+  HalfEdgeVertex *firstQhVertex = &m_halfEdgeVertices.back();
+  m_halfEdgeVertices.push_back(HalfEdgeVertex(secondVertex));
+  HalfEdgeVertex *secondQhVertex = &m_halfEdgeVertices.back();
+  m_halfEdgeVertices.push_back(HalfEdgeVertex(thirdVertex));
+  HalfEdgeVertex *thirdQhVertex = &m_halfEdgeVertices.back();
+  m_halfEdgeVertices.push_back(HalfEdgeVertex(fourthVertex));
+  HalfEdgeVertex *fourthQhVertex = &m_halfEdgeVertices.back();
 #ifdef QUICK_HULL_DEBUG
   std::cout << "Initial hull vertices:" << std::endl;
   std::cout << "Vertex1:" << std::endl;
@@ -534,187 +699,148 @@ void QuickHull::buildInitialHull() {
   std::cout << "z: " << fourthVertex.z << ")\n";
 #endif // QUICK_HULL_DEBUG
 
-  qhHullFaces.emplace_back();
-  QhFace *face1 = &qhHullFaces.back();
-  qhHullFaces.emplace_back();
-  QhFace *face2 = &qhHullFaces.back();
-  qhHullFaces.emplace_back();
-  QhFace *face3 = &qhHullFaces.back();
-  qhHullFaces.emplace_back();
-  QhFace *face4 = &qhHullFaces.back();
+  HalfEdgeFace *face1 = new HalfEdgeFace();
+  HalfEdgeFace *face2 = new HalfEdgeFace();
+  HalfEdgeFace *face3 = new HalfEdgeFace();
+  HalfEdgeFace *face4 = new HalfEdgeFace();
 
-  qhFaceHullSet.push_back(face1);
-  qhFaceHullSet.push_back(face2);
-  qhFaceHullSet.push_back(face3);
-  qhFaceHullSet.push_back(face4);
+  m_hullHalEdgeFacesPtr.push_back(face1);
+  m_hullHalEdgeFacesPtr.push_back(face2);
+  m_hullHalEdgeFacesPtr.push_back(face3);
+  m_hullHalEdgeFacesPtr.push_back(face4);
 
-  QhVertex *face1FirstVertex = firstQhVertex;
-  QhVertex *face1SecondVertex = secondQhVertex;
-  QhVertex *face1ThirdVertex = thirdQhVertex;
-  QhVertex *face1FourthVertex = fourthQhVertex;
+  HalfEdgeVertex *face1FirstVertex = firstQhVertex;
+  HalfEdgeVertex *face1SecondVertex = secondQhVertex;
+  HalfEdgeVertex *face1ThirdVertex = thirdQhVertex;
+  HalfEdgeVertex *face1FourthVertex = fourthQhVertex;
   Triangle firstTriangle(face1FirstVertex->position,
                          face1SecondVertex->position,
                          face1ThirdVertex->position);
   if (firstTriangle.isTowards(face1FourthVertex->position)) {
-    QhVertex *tempVert = face1FirstVertex;
+    HalfEdgeVertex *tempVert = face1FirstVertex;
     face1FirstVertex = face1SecondVertex;
     face1SecondVertex = tempVert;
   }
   // face1
-  qhHalfHullEdges.emplace_back();
-  QhHalfEdge *face1Edge1 = &qhHalfHullEdges.back();
-  qhHalfEdgeHullSet.push_back(face1Edge1);
-  face1Edge1->face = face1;
-  face1Edge1->tail = face1FirstVertex;
-  face1->edge = face1Edge1;
+  HalfEdge *face1Edge1 = new HalfEdge(face1, face1FirstVertex);
+  m_hullHalfEdgesPtr.push_back(face1Edge1);
+  face1->m_edge = face1Edge1;
 
-  qhHalfHullEdges.emplace_back();
-  QhHalfEdge *face1Edge2 = &qhHalfHullEdges.back();
-  qhHalfEdgeHullSet.push_back(face1Edge2);
-  face1Edge2->face = face1;
-  face1Edge2->tail = face1SecondVertex;
+  HalfEdge *face1Edge2 = new HalfEdge(face1, face1SecondVertex);
+  m_hullHalfEdgesPtr.push_back(face1Edge2);
 
-  qhHalfHullEdges.emplace_back();
-  QhHalfEdge *face1Edge3 = &qhHalfHullEdges.back();
-  qhHalfEdgeHullSet.push_back(face1Edge3);
-  face1Edge3->face = face1;
-  face1Edge3->tail = face1ThirdVertex;
+  HalfEdge *face1Edge3 = new HalfEdge(face1, face1ThirdVertex);
+  m_hullHalfEdgesPtr.push_back(face1Edge3);
 
-  face1Edge1->next = face1Edge2;
-  face1Edge2->next = face1Edge3;
-  face1Edge3->next = face1Edge1;
+  face1Edge1->m_next = face1Edge2;
+  face1Edge2->m_next = face1Edge3;
+  face1Edge3->m_next = face1Edge1;
 
-  face1Edge1->previous = face1Edge3;
-  face1Edge2->previous = face1Edge1;
-  face1Edge3->previous = face1Edge2;
+  face1Edge1->m_previous = face1Edge3;
+  face1Edge2->m_previous = face1Edge1;
+  face1Edge3->m_previous = face1Edge2;
 
-  QhVertex *face2FirstVertex = firstQhVertex;
-  QhVertex *face2SecondVertex = secondQhVertex;
-  QhVertex *face2ThirdVertex = thirdQhVertex;
-  QhVertex *face2FourthVertex = fourthQhVertex;
+  HalfEdgeVertex *face2FirstVertex = firstQhVertex;
+  HalfEdgeVertex *face2SecondVertex = secondQhVertex;
+  HalfEdgeVertex *face2ThirdVertex = thirdQhVertex;
+  HalfEdgeVertex *face2FourthVertex = fourthQhVertex;
   Triangle secondTriangle(face2SecondVertex->position,
                           face2ThirdVertex->position,
                           face2FourthVertex->position);
   if (secondTriangle.isTowards(face2FirstVertex->position)) {
-    QhVertex *tempVert = face2SecondVertex;
+    HalfEdgeVertex *tempVert = face2SecondVertex;
     face2SecondVertex = face2ThirdVertex;
     face2ThirdVertex = tempVert;
   }
   // face2
-  qhHalfHullEdges.emplace_back();
-  QhHalfEdge *face2Edge1 = &qhHalfHullEdges.back();
-  qhHalfEdgeHullSet.push_back(face2Edge1);
-  face2Edge1->face = face2;
-  face2Edge1->tail = face2SecondVertex;
-  face2->edge = face2Edge1;
+  HalfEdge *face2Edge1 = new HalfEdge(face2, face2SecondVertex);
+  m_hullHalfEdgesPtr.push_back(face2Edge1);
+  face2->m_edge = face2Edge1;
 
-  qhHalfHullEdges.emplace_back();
-  QhHalfEdge *face2Edge2 = &qhHalfHullEdges.back();
-  qhHalfEdgeHullSet.push_back(face2Edge2);
-  face2Edge2->face = face2;
-  face2Edge2->tail = face2ThirdVertex;
+  HalfEdge *face2Edge2 = new HalfEdge(face2, face2ThirdVertex);
+  m_hullHalfEdgesPtr.push_back(face2Edge2);
 
-  qhHalfHullEdges.emplace_back();
-  QhHalfEdge *face2Edge3 = &qhHalfHullEdges.back();
-  qhHalfEdgeHullSet.push_back(face2Edge3);
-  face2Edge3->face = face2;
-  face2Edge3->tail = face2FourthVertex;
+  HalfEdge *face2Edge3 = new HalfEdge(face2, face2FourthVertex);
+  m_hullHalfEdgesPtr.push_back(face2Edge3);
 
-  face2Edge1->next = face2Edge2;
-  face2Edge2->next = face2Edge3;
-  face2Edge3->next = face2Edge1;
+  face2Edge1->setNext(face2Edge2);
+  face2Edge2->setNext(face2Edge3);
+  face2Edge3->setNext(face2Edge1);
 
-  face2Edge1->previous = face2Edge3;
-  face2Edge2->previous = face2Edge1;
-  face2Edge3->previous = face2Edge2;
+  face2Edge1->setPrevious(face2Edge3);
+  face2Edge2->setPrevious(face2Edge1);
+  face2Edge3->setPrevious(face2Edge2);
 
-  QhVertex *face3FirstVertex = firstQhVertex;
-  QhVertex *face3SecondVertex = secondQhVertex;
-  QhVertex *face3ThirdVertex = thirdQhVertex;
-  QhVertex *face3FourthVertex = fourthQhVertex;
+  HalfEdgeVertex *face3FirstVertex = firstQhVertex;
+  HalfEdgeVertex *face3SecondVertex = secondQhVertex;
+  HalfEdgeVertex *face3ThirdVertex = thirdQhVertex;
+  HalfEdgeVertex *face3FourthVertex = fourthQhVertex;
   Triangle thirdTriangle(face3FirstVertex->position,
                          face3SecondVertex->position,
                          face3FourthVertex->position);
   if (thirdTriangle.isTowards(face3ThirdVertex->position)) {
-    QhVertex *tempVert = face3FirstVertex;
+    HalfEdgeVertex *tempVert = face3FirstVertex;
     face3FirstVertex = face3SecondVertex;
     face3SecondVertex = tempVert;
   }
   // face3
-  qhHalfHullEdges.emplace_back();
-  QhHalfEdge *face3Edge1 = &qhHalfHullEdges.back();
-  qhHalfEdgeHullSet.push_back(face3Edge1);
-  face3Edge1->face = face3;
-  face3Edge1->tail = face3FirstVertex;
-  face3->edge = face3Edge1;
+  HalfEdge *face3Edge1 = new HalfEdge(face3, face3FirstVertex);
 
-  qhHalfHullEdges.emplace_back();
-  QhHalfEdge *face3Edge2 = &qhHalfHullEdges.back();
-  qhHalfEdgeHullSet.push_back(face3Edge2);
-  face3Edge2->face = face3;
-  face3Edge2->tail = face3SecondVertex;
+  m_hullHalfEdgesPtr.push_back(face3Edge1);
+  face3->m_edge = face3Edge1;
 
-  qhHalfHullEdges.emplace_back();
-  QhHalfEdge *face3Edge3 = &qhHalfHullEdges.back();
-  qhHalfEdgeHullSet.push_back(face3Edge3);
-  face3Edge3->face = face3;
-  face3Edge3->tail = face3FourthVertex;
+  HalfEdge *face3Edge2 = new HalfEdge(face3, face3SecondVertex);
+  m_hullHalfEdgesPtr.push_back(face3Edge2);
 
-  face3Edge1->next = face3Edge2;
-  face3Edge2->next = face3Edge3;
-  face3Edge3->next = face3Edge1;
+  HalfEdge *face3Edge3 = new HalfEdge(face3, face3FourthVertex);
+  m_hullHalfEdgesPtr.push_back(face3Edge3);
 
-  face3Edge1->previous = face3Edge3;
-  face3Edge2->previous = face3Edge1;
-  face3Edge3->previous = face3Edge2;
+  face3Edge1->setNext(face3Edge2);
+  face3Edge2->setNext(face3Edge3);
+  face3Edge3->setNext(face3Edge1);
 
-  QhVertex *face4FirstVertex = firstQhVertex;
-  QhVertex *face4SecondVertex = secondQhVertex;
-  QhVertex *face4ThirdVertex = thirdQhVertex;
-  QhVertex *face4FourthVertex = fourthQhVertex;
+  face3Edge1->setPrevious(face3Edge3);
+  face3Edge2->setPrevious(face3Edge1);
+  face3Edge3->setPrevious(face3Edge2);
+
+  HalfEdgeVertex *face4FirstVertex = firstQhVertex;
+  HalfEdgeVertex *face4SecondVertex = secondQhVertex;
+  HalfEdgeVertex *face4ThirdVertex = thirdQhVertex;
+  HalfEdgeVertex *face4FourthVertex = fourthQhVertex;
   Triangle fourthTriangle(face4FirstVertex->position,
                           face4ThirdVertex->position,
                           face4FourthVertex->position);
   if (fourthTriangle.isTowards(face4SecondVertex->position)) {
-    QhVertex *tempVert = face4FirstVertex;
+    HalfEdgeVertex *tempVert = face4FirstVertex;
     face4FirstVertex = face4ThirdVertex;
     face4ThirdVertex = tempVert;
   }
   // face4
-  qhHalfHullEdges.emplace_back();
-  QhHalfEdge *face4Edge1 = &qhHalfHullEdges.back();
-  qhHalfEdgeHullSet.push_back(face4Edge1);
-  face4Edge1->face = face4;
-  face4Edge1->tail = face4FirstVertex;
-  face4->edge = face4Edge1;
+  HalfEdge *face4Edge1 = new HalfEdge(face4, face4FirstVertex);
+  m_hullHalfEdgesPtr.push_back(face4Edge1);
+  face4->m_edge = face4Edge1;
 
-  qhHalfHullEdges.emplace_back();
-  QhHalfEdge *face4Edge2 = &qhHalfHullEdges.back();
-  qhHalfEdgeHullSet.push_back(face4Edge2);
-  face4Edge2->face = face4;
-  face4Edge2->tail = face4ThirdVertex;
+  HalfEdge *face4Edge2 = new HalfEdge(face4, face4ThirdVertex);
+  m_hullHalfEdgesPtr.push_back(face4Edge2);
 
-  qhHalfHullEdges.emplace_back();
-  QhHalfEdge *face4Edge3 = &qhHalfHullEdges.back();
-  qhHalfEdgeHullSet.push_back(face4Edge3);
-  face4Edge3->face = face4;
-  face4Edge3->tail = face4FourthVertex;
+  HalfEdge *face4Edge3 = new HalfEdge(face4, face4FourthVertex);
+  m_hullHalfEdgesPtr.push_back(face4Edge3);
 
-  face4Edge1->next = face4Edge2;
-  face4Edge2->next = face4Edge3;
-  face4Edge3->next = face4Edge1;
+  face4Edge1->setNext(face4Edge2);
+  face4Edge2->setNext(face4Edge3);
+  face4Edge3->setNext(face4Edge1);
 
-  face4Edge1->previous = face4Edge3;
-  face4Edge2->previous = face4Edge1;
-  face4Edge3->previous = face4Edge2;
+  face4Edge1->setPrevious(face4Edge3);
+  face4Edge2->setPrevious(face4Edge1);
+  face4Edge3->setPrevious(face4Edge2);
 
-  for (QhHalfEdge *edge1 : qhHalfEdgeHullSet) {
+  for (HalfEdge *edge1 : m_hullHalfEdgesPtr) {
 
-    for (QhHalfEdge *edge2 : qhHalfEdgeHullSet) {
-      if (edge1->tail == edge2->next->tail &&
-          edge1->next->tail == edge2->tail) {
-        edge1->twin = edge2;
-        edge2->twin = edge1;
+    for (HalfEdge *edge2 : m_hullHalfEdgesPtr) {
+      if (edge1->m_tail == edge2->m_next->m_tail &&
+          edge1->m_next->m_tail == edge2->m_tail) {
+        edge1->m_twin = edge2;
+        edge2->m_twin = edge1;
       }
     }
   }
@@ -723,36 +849,27 @@ void QuickHull::buildInitialHull() {
   debugPrintdata();
 #endif // QUICK_HULL_DEBUG
 
-  for (const glm::vec3 vertex : vertices) {
+  for (const glm::vec3 vertex : m_vertices) {
     float distanceToFace1 = face1->distanceToPoint(vertex);
     float distanceToFace2 = face2->distanceToPoint(vertex);
     float distanceToFace3 = face3->distanceToPoint(vertex);
     float distanceToFace4 = face4->distanceToPoint(vertex);
-    if (distanceToFace1 > epsilon) {
-      qhVertices.emplace_back();
-      qhVertices.back().position = vertex;
-      face1->conflictList.push_back(qhVertices.back().position);
+    if (distanceToFace1 > m_epsilon) {
+      face1->m_conflictList.push_back(vertex);
     }
-    if (distanceToFace2 > epsilon) {
-      qhVertices.emplace_back();
-      qhVertices.back().position = vertex;
-      face2->conflictList.push_back(qhVertices.back().position);
+    if (distanceToFace2 > m_epsilon) {
+      face2->m_conflictList.push_back(vertex);
     }
-    if (distanceToFace3 > epsilon) {
-      qhVertices.emplace_back();
-      qhVertices.back().position = vertex;
-      face3->conflictList.push_back(qhVertices.back().position);
+    if (distanceToFace3 > m_epsilon) {
+      face3->m_conflictList.push_back(vertex);
     }
-    if (distanceToFace4 > epsilon) {
-      qhVertices.emplace_back();
-      qhVertices.back().position = vertex;
-      face4->conflictList.push_back(qhVertices.back().position);
+    if (distanceToFace4 > m_epsilon) {
+      face4->m_conflictList.push_back(vertex);
     }
   }
-  assert(qhHullFaces.size() == 4);
-  assert(qhFaceHullSet.size() == 4);
-  assert(qhHalfHullEdges.size() == 12);
-  assert(qhHalfEdgeHullSet.size() == 12);
+  assert(m_hullHalEdgeFacesPtr.size() == 4);
+  assert(m_halfEdgeVertices.size() == 4);
+  assert(m_hullHalfEdgesPtr.size() == 12);
 #ifdef QUICK_HULL_DEBUG
   int index = 0;
   for (const QhFace *face : qhFaceHullSet) {
@@ -764,20 +881,11 @@ void QuickHull::buildInitialHull() {
 #endif // QUICK_HULL_DEBUG
 }
 
-void QuickHull::deleteFace(QhFace *face) {
-  for (auto it = qhHullFaces.begin(); it != qhHullFaces.end();) {
-    if (&*it == face) {
-      it = qhHullFaces.erase(it);
-    } else {
-      it++;
-    }
-  }
-}
 float QuickHull::calculateEpsilon() {
   float maxAbsX = 0.0;
   float maxAbsY = 0.0;
   float maxAbsZ = 0.0;
-  for (const glm::vec3 &vertex : vertices) {
+  for (const glm::vec3 &vertex : m_vertices) {
     float absX = glm::abs(vertex.x);
     maxAbsX = maxAbsX < absX ? absX : maxAbsX;
     float absY = glm::abs(vertex.y);
@@ -788,32 +896,32 @@ float QuickHull::calculateEpsilon() {
   return 3 * (maxAbsX + maxAbsY + maxAbsZ) *
          std::numeric_limits<float>::epsilon();
 }
-std::list<QhHalfEdge *> QuickHull::getHorizon(QhFace *face,
-                                              const glm::vec3 &eye) {
+std::list<HalfEdge *> QuickHull::getHorizon(HalfEdgeFace *face,
+                                            const glm::vec3 &eye) {
 
-  face->visited = true;
+  face->m_visited = true;
 
-  std::list<QhFace *> nextFaces;
-  for (const QhHalfEdge *edge : face->getEdges()) {
-    QhFace *currentFace = edge->twin->face;
+  std::list<HalfEdgeFace *> nextFaces;
+  for (const HalfEdge *edge : face->getEdges()) {
+    HalfEdgeFace *currentFace = edge->m_twin->m_face;
 
-    if (!currentFace->visited) {
+    if (!currentFace->m_visited) {
       float distance = currentFace->distanceToPoint(eye);
-      if (distance > epsilon) {
+      if (distance > m_epsilon) {
         nextFaces.push_back(currentFace);
       }
     }
   }
 
-  std::list<QhHalfEdge *> horizonEdges;
-  for (QhFace *face : nextFaces) {
+  std::list<HalfEdge *> horizonEdges;
+  for (HalfEdgeFace *face : nextFaces) {
     horizonEdges = QuickHull::getHorizon(face, eye);
   }
-  for (QhHalfEdge *edge : face->getEdges()) {
-    QhFace *currentFace = edge->twin->face;
+  for (HalfEdge *edge : face->getEdges()) {
+    HalfEdgeFace *currentFace = edge->m_twin->m_face;
 
-    if (!currentFace->visited) {
-      horizonEdges.push_back(edge->twin);
+    if (!currentFace->m_visited) {
+      horizonEdges.push_back(edge->m_twin);
     }
   }
   return horizonEdges;
