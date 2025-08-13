@@ -81,6 +81,16 @@ void Renderer::init() {
 }
 void Renderer::destroy() { cleanup(); }
 
+void Renderer::addLoadSceneEvent(
+    std::function<void(const std::string &path)> &loadFunc) {
+  m_loadMeshEvent = loadFunc;
+}
+void Renderer::addSimulationControlEvent(
+    std::function<void()> &resumeSimulation,
+    std::function<void()> &stopSimulation) {
+  m_resumeSimulation = resumeSimulation;
+  m_stopSimulation = stopSimulation;
+}
 void Renderer::initWindow() {
   glfwInit();
 
@@ -1201,24 +1211,48 @@ void Renderer::drawScene() {
 
         IGFD::FileDialogConfig config;
         config.path = ".";
-        ImGuiFileDialog::Instance()->OpenDialog(
-            "ChooseFileDlgKey", "Choose File", ".cpp,.h,.hpp", config);
+        ImGuiFileDialog::Instance()->OpenDialog("ChooseFileDlgKey",
+                                                "Choose File", ".gltf", config);
+      }
+
+      ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Simulation")) {
+      bool isSimulationStopped = m_isSimulationStoped;
+      if (!isSimulationStopped) {
+        ImGui::BeginDisabled();
+      }
+      if (ImGui::MenuItem("Resume Simulation")) {
+        m_resumeSimulation();
+        m_isSimulationStoped = false;
+      }
+      if (!isSimulationStopped) {
+        ImGui::EndDisabled();
+      }
+      if (isSimulationStopped) {
+        ImGui::BeginDisabled();
+      }
+      if (ImGui::MenuItem("Stop Simulation")) {
+        m_stopSimulation();
+        m_isSimulationStoped = true;
+      }
+      if (isSimulationStopped) {
+        ImGui::EndDisabled();
       }
       ImGui::EndMenu();
     }
     ImGui::EndMainMenuBar();
   }
 
-  // display
   if (ImGuiFileDialog::Instance()->Display(
           "ChooseFileDlgKey")) {               // => will show a dialog
     if (ImGuiFileDialog::Instance()->IsOk()) { // action if OK
       std::string filePathName = ImGuiFileDialog::Instance()->GetFilePathName();
       std::string filePath = ImGuiFileDialog::Instance()->GetCurrentPath();
-      // action
+      std::cout << "loading: " << filePath << filePathName << std::endl;
+      m_loadMeshEvent(filePathName);
     }
 
-    // close
     ImGuiFileDialog::Instance()->Close();
   }
   ImGui::Render();

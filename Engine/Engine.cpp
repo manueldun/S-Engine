@@ -4,12 +4,28 @@
 #include "Renderer.h"
 #include "utils.h"
 #include <chrono>
+#include <functional>
 namespace Engine {
 Entity::Entity(const std::shared_ptr<Renderer::Drawing> &drawing,
                const ph::Body &body)
     : drawing(drawing), body(body) {}
 
 void Entity::update() { drawing->setTranform(body.getTransform()); }
+
+Engine::Engine() {
+  std::function<void(const std::string &path)> loadSceneEvent =
+      [this](const std::string &path) { this->loadScene(path); };
+  renderer.addLoadSceneEvent(loadSceneEvent);
+  std::function<void()> resumeSimulationEvent = [this]() {
+    this->physicsSystem.resumeSimulation();
+  };
+  std::function<void()> stopSimulationEvent = [this]() {
+    this->physicsSystem.stopSimulation();
+  };
+
+  renderer.addSimulationControlEvent(resumeSimulationEvent,
+                                     stopSimulationEvent);
+}
 void Engine::loadScene(const std::string &path) {
 
   const tinygltf::Model &sceneModel = util::loadGltfFile(path);
@@ -19,7 +35,6 @@ void Engine::loadScene(const std::string &path) {
     auto body = physicsSystem.addMesh(*meshNode);
     entities.push_back(Entity(drawing, body));
   }
-
 }
 void Engine::loop() {
 

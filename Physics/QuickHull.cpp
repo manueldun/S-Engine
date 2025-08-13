@@ -1,4 +1,5 @@
 #include "QuickHull.h"
+#include "Triangle.h"
 #include "glm/common.hpp"
 #include <iostream>
 #include <map>
@@ -195,6 +196,27 @@ Mesh::Mesh(const std::vector<glm::vec3> &vertices,
            const std::vector<uint16_t> &indices)
     : vertices(vertices), indices(indices) {}
 
+Witness::Witness(const glm::vec3 &normal, const glm::vec3 &point)
+    : normal(normal), point(point) {}
+
+PlanePointCollision::PlanePointCollision(const glm::vec3 &point,
+                                         const Triangle &trianglePlane)
+    : m_point1(point), m_trianglePlane2(trianglePlane) {}
+glm::vec3 PlanePointCollision::getPosition1() const {
+  return m_trianglePlane2.getVertexData().at(0);
+}
+glm::vec3 PlanePointCollision::getPosition2() const { return m_point1; }
+glm::vec3 PlanePointCollision::getNormal() const {
+  return m_trianglePlane2.getNormal();
+}
+
+EdgeEdgeCollision::EdgeEdgeCollision(const std::array<glm::vec3, 2> &edge1,
+                                     const std::array<glm::vec3, 2> &edge2,
+                                     const glm::vec3 &normal)
+    : m_edge1(edge1), m_edge2(edge1), m_normal(normal) {}
+glm::vec3 EdgeEdgeCollision::getPosition1() const { return m_edge1.at(0); }
+glm::vec3 EdgeEdgeCollision::getPosition2() const { return m_edge2.at(0); }
+glm::vec3 EdgeEdgeCollision::getNormal() const { return m_normal; }
 QuickHull::QuickHull(const std::vector<glm::vec3> &vertices,
                      const std::string &name)
     : m_vertices(vertices), m_epsilon(calculateEpsilon()), m_name(name) {
@@ -238,6 +260,7 @@ QuickHull::QuickHull(const QuickHull &quickHull)
     vertexMap[&vertex]->m_edge = edgeMap[vertex.m_edge];
   }
   for (HalfEdge *edge : quickHull.m_hullHalfEdgesPtr) {
+    edgeMap[edge]->m_face = faceMap[edge->m_face];
     edgeMap[edge]->m_tail = vertexMap[edge->m_tail];
     edgeMap[edge]->m_next = edgeMap[edge->m_next];
     edgeMap[edge]->m_previous = edgeMap[edge->m_previous];
@@ -303,45 +326,46 @@ void QuickHull::buildQuickHull() {
 std::vector<glm::vec3> QuickHull::getVertexBuffer() { return m_hullVertices; }
 std::vector<size_t> QuickHull::getIndexBuffer() { return m_hullIndices; }
 
-std::vector<PlanePointCollision>
+std::vector<std::shared_ptr<Collision>>
 QuickHull::getPlanePointCollisions(const glm::mat4 &thisTransform,
                                    const QuickHull &thatHull,
                                    const glm::mat4 &thatTransform) const {
-  std::vector<PlanePointCollision> collisions;
+  std::vector<std::shared_ptr<Collision>> collisions;
 
-  for (HalfEdgeFace *thisFace : m_hullHalEdgeFacesPtr) {
+  for (const HalfEdgeVertex &heThisVertex : m_halfEdgeVertices) {
 
-    Triangle thisTriangle =
-        thisFace->getTrianglePlane().transform(thisTransform);
+    glm::vec3 thisVertex =
+        thisTransform * glm::vec4(heThisVertex.position, 1.0f);
 
     bool isInside = true;
-    glm::vec3 thatVertex;
-    for (const HalfEdgeVertex &thatQhVertex : thatHull.m_halfEdgeVertices) {
+    std::unique_ptr<Triangle> thatTriangle;
+    for (HalfEdgeFace *thatFace : thatHull.m_hullHalEdgeFacesPtr) {
+      thatTriangle = std::make_unique<Triangle>(
+          thatFace->getTrianglePlane().transform(thatTransform));
 
-      thatVertex = thatTransform * glm::vec4(thatQhVertex.position, 1.0f);
-
-      if (thisTriangle.isTowards(thatVertex, 0.0f)) {
+      if (thatTriangle->isTowards(thisVertex, 0.0f)) {
 
         isInside = false;
         break;
       }
     }
     if (isInside) {
-      collisions.push_back(PlanePointCollision{.point = thatVertex,
-                                               .trianglePlane = thisTriangle});
+      collisions.push_back(
+          std::make_shared<PlanePointCollision>(thisVertex, *thatTriangle));
     }
   }
   return collisions;
 }
-std::vector<EdgeEdgeCollision>
+std::vector<std::shared_ptr<Collision>>
 QuickHull::getEdgeEdgeCollisions(const glm::mat4 &thisTransform,
                                  const QuickHull &thatHull,
                                  const glm::mat4 &thatTransform) const {
-  std::vector<EdgeEdgeCollision> collisions;
+  std::vector<std::shared_ptr<Collision>> collisions;
   for (HalfEdge *thatEdge : thatHull.m_hullHalfEdgesPtr) {
     std::array<glm::vec3, 2> thatEdgePoints = {thatEdge->getTail(),
                                                thatEdge->getHead()};
     bool isInside = true;
+    glm::vec3 thisEdgeNormal;
     std::array<glm::vec3, 2> thisEdgePoints;
     for (HalfEdge *thisEdge : m_hullHalfEdgesPtr) {
       thisEdgePoints = {thisEdge->getTail(), thisEdge->getHead()};
@@ -351,7 +375,7 @@ QuickHull::getEdgeEdgeCollisions(const glm::mat4 &thisTransform,
       glm::vec3 normalTwin = thisEdge->m_twin->m_face->getTrianglePlane()
                                  .transform(thisTransform)
                                  .getNormal();
-      glm::vec3 thisEdgeNormal = (normal + normalTwin) / 2.0f;
+      thisEdgeNormal = (normal + normalTwin) / 2.0f;
       float dotProduct = glm::dot(
           thisEdgeNormal, thatEdgePoints.at(0) - thisEdge->m_tail->position);
       if (dotProduct > 0.0f) {
@@ -360,11 +384,52 @@ QuickHull::getEdgeEdgeCollisions(const glm::mat4 &thisTransform,
       }
     }
     if (isInside) {
-      collisions.push_back(
-          EdgeEdgeCollision{.edge1 = thisEdgePoints, .edge2 = thatEdgePoints});
+      collisions.push_back(std::make_shared<EdgeEdgeCollision>(
+          thatEdgePoints, thisEdgePoints, thisEdgeNormal));
     }
   }
   return collisions;
+}
+std::shared_ptr<Witness>
+QuickHull::getWitness(const glm::mat4 &thisTransform, const QuickHull &ThatHull,
+                      const glm::mat4 &thatTransform) const {
+  std::shared_ptr<Witness> witness;
+  for (HalfEdgeFace *face : m_hullHalEdgeFacesPtr) {
+    bool isTowardsPoint = true;
+    glm::vec3 normal;
+    glm::vec3 worldSpaceVertex;
+    for (const HalfEdgeVertex &vertex : ThatHull.m_halfEdgeVertices) {
+      worldSpaceVertex = thatTransform * glm::vec4(vertex.position, 1.0f);
+      Triangle triangle = face->getTrianglePlane().transform(thisTransform);
+      if (!triangle.isTowards(worldSpaceVertex)) {
+        isTowardsPoint = false;
+        break;
+      }
+      normal = triangle.getNormal();
+    }
+    if (isTowardsPoint) {
+      return std::make_shared<Witness>(normal, worldSpaceVertex);
+    }
+  }
+  for (HalfEdge *edge1 : m_hullHalfEdgesPtr) {
+    for (HalfEdge *edge2 : ThatHull.m_hullHalfEdgesPtr) {
+      glm::vec3 edge1point1 =
+          thisTransform * glm::vec4(edge1->m_tail->position, 1.0f);
+      glm::vec3 edge1point2 =
+          thisTransform * glm::vec4(edge1->m_next->m_tail->position, 1.0f);
+      glm::vec3 edge2point1 =
+          thatTransform * glm::vec4(edge2->m_tail->position, 1.0f);
+      glm::vec3 edge2point2 =
+          thatTransform * glm::vec4(edge2->m_next->m_tail->position, 1.0f);
+      glm::vec3 edge1vec = edge1point1 - edge1point2;
+      glm::vec3 edge2vec = edge2point1 - edge2point2;
+      glm::vec3 normal = glm::normalize(glm::cross(edge1vec, edge2vec));
+      for (const HalfEdgeVertex &heVertex : m_hullVertices) {
+        glm::vec3 vertex = glm::vec4(heVertex.position, 1.0f);
+      }
+    }
+  }
+  return witness;
 }
 void QuickHull::createMesh() {
   std::map<const HalfEdgeVertex *const, size_t> indicesMap;

@@ -5,6 +5,7 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include "QuickHull.h"
 #include "glm/gtx/quaternion.hpp"
+#include <optional>
 #include <sys/wait.h>
 #include <vector>
 namespace ph {
@@ -35,7 +36,10 @@ public:
   void setPosition(const glm::vec3 &position);
   glm::quat getOrientation() const;
   void setOrientation(const glm::quat &orientation);
-  bool doesIntersect(const RigidBody &rigidBody) const;
+  std::optional<float> getInterPenetration(const RigidBody &rigidBody) const;
+  float
+  calculateTimeOfContact(const RigidBody &rigidBody,
+                         const std::shared_ptr<Collision> collision) const;
   const glm::mat4 getTransform() const;
 
   const QuickHull m_hull;
@@ -85,7 +89,10 @@ public:
 
   static constexpr float c_gravity = 9.8f;
 
+  void stopSimulation();
+  void resumeSimulation();
 private:
+  bool m_isStopped = true;
   std::vector<RigidBody> m_rigidBodies;
 };
 class Body {

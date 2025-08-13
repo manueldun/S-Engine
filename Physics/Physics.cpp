@@ -1,6 +1,7 @@
 #include "Physics.h"
 #include "QuickHull.h"
 #include "glm/detail/qualifier.hpp"
+#include "glm/exponential.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/ext/quaternion_transform.hpp"
 #include "glm/gtc/quaternion.hpp"
@@ -13,8 +14,8 @@ RigidBody::RigidBody(const RigidBody &rigidBody)
                 rigidBody.m_position, rigidBody.m_orientation,
                 rigidBody.m_linearMomentum / rigidBody.m_mass,
                 rigidBody.m_IbodyInv * rigidBody.m_angularMomentum) {}
-RigidBody::RigidBody(const QuickHull &hull, const float &mass, const glm::mat3 &Ibody,
-                     const glm::vec3 &initialPosition,
+RigidBody::RigidBody(const QuickHull &hull, const float &mass,
+                     const glm::mat3 &Ibody, const glm::vec3 &initialPosition,
                      const glm::quat &initialOrientation,
                      const glm::vec3 &initialVelocity,
                      const glm::vec3 &initialAngularVelocity)
@@ -68,19 +69,87 @@ glm::quat RigidBody::getOrientation() const {
 void RigidBody::setOrientation(const glm::quat &orientation) {
   m_orientation = orientation;
 }
-bool RigidBody::doesIntersect(const RigidBody &thatRigidBody) const {
+std::optional<float>
+RigidBody::getInterPenetration(const RigidBody &thatRigidBody) const {
   glm::mat4 thisTransform =
       glm::translate(glm::toMat4(getOrientation()), getPosition());
   glm::mat4 thatTransform = glm::translate(
       glm::toMat4(thatRigidBody.getOrientation()), thatRigidBody.getPosition());
-  std::vector<PlanePointCollision> planePointCollisions =
+  std::vector<std::shared_ptr<Collision>> planePointCollisions =
       m_hull.getPlanePointCollisions(thisTransform, thatRigidBody.m_hull,
                                      thatTransform);
-  if (planePointCollisions.size() == 0) {
-    return false;
-  } else {
-    return true;
+  std::vector<std::shared_ptr<Collision>> edgeEdgeCollisions =
+      m_hull.getEdgeEdgeCollisions(thisTransform, thatRigidBody.m_hull,
+                                   thatTransform);
+  std::optional<float> maxTimeOfContact;
+  for (std::shared_ptr<Collision> &collision : planePointCollisions) {
+    float timeOfContact = calculateTimeOfContact(thatRigidBody, collision);
+    if (!maxTimeOfContact.has_value() || timeOfContact < maxTimeOfContact) {
+      maxTimeOfContact = timeOfContact;
+    }
   }
+  for (std::shared_ptr<Collision> &collision : edgeEdgeCollisions) {
+    float timeOfContact = calculateTimeOfContact(thatRigidBody, collision);
+    if (!maxTimeOfContact.has_value() || timeOfContact < maxTimeOfContact) {
+      maxTimeOfContact = timeOfContact;
+    }
+  }
+  return maxTimeOfContact;
+}
+float RigidBody::calculateTimeOfContact(
+    const RigidBody &thatRigidBody,
+    const std::shared_ptr<Collision> collision) const {
+  glm::vec3 point1 = collision->getPosition1();
+  glm::vec3 point2 = collision->getPosition2();
+  glm::vec3 normal = collision->getNormal();
+  float thisMass = m_mass;
+  glm::vec3 thisLinearVelocity = glm::vec3(0.0f);
+  glm::vec3 thisAngularVelocity = glm::vec3(0.0f);
+  glm::vec3 thisForce = glm::vec3(0.0f);
+  glm::vec3 thisTorque = glm::vec3(0.0f);
+  glm::vec3 point1Acceleration = glm::vec3(0.0f);
+  if (thisMass != 0.0f) {
+    thisLinearVelocity = m_linearMomentum / thisMass;
+    thisAngularVelocity = m_IbodyInv * m_angularMomentum;
+    thisForce = m_force;
+    thisTorque = m_torque;
+    point1Acceleration =
+        glm::vec3(0.0f, -1.0f, 0.0f) * RigidBodySystem::c_gravity;
+  }
+  float thatMass = thatRigidBody.m_mass;
+  glm::vec3 thatLinearVelocity = glm::vec3(0.0f);
+  glm::vec3 thatAngularVelocity = glm::vec3(0.0f);
+  glm::vec3 thatForce = glm::vec3(0.0f);
+  glm::vec3 thatTorque = glm::vec3(0.0f);
+  glm::vec3 point2Acceleration = glm::vec3(0.0f);
+  if (thatMass != 0.0f) {
+    thatLinearVelocity = thatRigidBody.m_linearMomentum / thatMass;
+    thatAngularVelocity =
+        thatRigidBody.m_IbodyInv * thatRigidBody.m_angularMomentum;
+    thatForce = thatRigidBody.m_force;
+    thatTorque = thatRigidBody.m_torque;
+    point1Acceleration =
+        glm::vec3(0.0f, -1.0f, 0.0f) * RigidBodySystem::c_gravity;
+  }
+  glm::vec3 point1Velocity =
+      thisLinearVelocity + glm::cross(point1, thisAngularVelocity);
+  glm::vec3 point2Velocity =
+      thatLinearVelocity + glm::cross(point2, thatAngularVelocity);
+  float relativeDistance = glm::dot(normal, point1 - point2);
+  float relativeVelocity = glm::dot(normal, point1Velocity - point2Velocity);
+  float relativeAcceleration =
+      glm::dot(normal, point1Acceleration - point2Acceleration) -
+      glm::dot(2.0f * (thatAngularVelocity), point1Velocity - point2Velocity);
+  float squareRootPart = relativeVelocity * relativeVelocity -
+                         2.0f * relativeAcceleration * relativeDistance;
+  std::cout << "to square root: " << squareRootPart << std::endl;
+  float root1 =
+      (-relativeVelocity + glm::sqrt(squareRootPart)) / relativeAcceleration;
+  float root2 =
+      (-relativeVelocity - glm::sqrt(squareRootPart)) / relativeAcceleration;
+  std::cout << "root 1: " << root1 << std::endl;
+  std::cout << "root 2: " << root2 << std::endl;
+  return root1 > root2 ? root1 : root2;
 }
 const glm::mat4 RigidBody::getTransform() const {
 
@@ -109,16 +178,25 @@ glm::vec3 RigidBody::getAngularVelocity() const {
 
 void RigidBodySystem::eulerStep(const float &delta) {
 
-  for (RigidBody &rigidBody : m_rigidBodies) {
-    rigidBody.addForcesAndTorques(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f));
-    rigidBody.eulerStep(delta);
-    rigidBody.clearForcesAndTorques();
-  }
-  for (size_t i = 0; i < m_rigidBodies.size(); i++) {
+  if (!m_isStopped) {
+    for (RigidBody &rigidBody : m_rigidBodies) {
+      rigidBody.addForcesAndTorques(glm::vec3(0.0f, 0.0f, 0.0f),
+                                    glm::vec3(0.0f));
+      rigidBody.eulerStep(delta);
+      rigidBody.clearForcesAndTorques();
+    }
+    for (size_t i = 0; i < m_rigidBodies.size(); i++) {
 
-    for (size_t j = i + 1; j < m_rigidBodies.size(); j++) {
-      if (i != j && m_rigidBodies[i].doesIntersect(m_rigidBodies[j])) {
-        std::cout << "Collided! " << i << " with " << j << std::endl;
+      for (size_t j = i + 1; j < m_rigidBodies.size(); j++) {
+        if (i != j) {
+          std::optional<float> penetrationTime =
+              m_rigidBodies[i].getInterPenetration(m_rigidBodies[j]);
+          if (penetrationTime.has_value()) {
+            std::cout << "penetration Time: " << penetrationTime.value()
+                      << std::endl;
+            stopSimulation();
+          }
+        }
       }
     }
   }
@@ -177,6 +255,8 @@ const glm::mat4 RigidBodySystem::getTransform(const uint32_t index) {
                         m_rigidBodies[index].getPosition());
 }
 
+void RigidBodySystem::stopSimulation() { m_isStopped = true; }
+void RigidBodySystem::resumeSimulation() { m_isStopped = false; }
 Body::Body(const uint32_t index, RigidBodySystem &system)
     : m_index(index), m_system(system) {}
 glm::vec3 Body::getPosition() const { return m_system.getPosition(m_index); }

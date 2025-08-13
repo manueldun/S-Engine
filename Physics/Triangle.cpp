@@ -77,8 +77,8 @@ glm::vec3 Triangle::getNormal() const {
   const glm::vec3 triangleEdge2 = m_vertex3 - m_vertex1;
   return glm::normalize(glm::cross(triangleEdge1, triangleEdge2));
 }
-const Triangle &Triangle::operator=(const Triangle &triangle) {
-  return triangle;
+std::array<glm::vec3, 3> Triangle::getVertexData() const {
+  return std::array<glm::vec3, 3>{m_vertex1, m_vertex2, m_vertex3};
 }
 Triangle::Triangle(const glm::vec3 &vertex1, const glm::vec3 &vertex2,
                    const glm::vec3 &vertex3)
