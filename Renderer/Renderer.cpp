@@ -1,6 +1,7 @@
 #include "Renderer.h"
 
 #include "GLFW/glfw3.h"
+#include "ImGuiFileDialog/ImGuiFileDialog.h"
 #include "Mesh.h"
 #include "glm/ext/vector_float3.hpp"
 #include "glm/fwd.hpp"
@@ -1190,11 +1191,36 @@ void Renderer::drawScene() {
   ImGui_ImplGlfw_NewFrame();
 
   ImGui::NewFrame();
-  /*ImGui::ShowDemoWindow();*/
+  // ImGui::ShowDemoWindow();
   for (const std::string *value : m_guiLabels) {
-    ImGui::LabelText("label", "%s", value->c_str());
+    ImGui::LabelText("label", "%s", "hello wordl");
+  }
+  if (ImGui::BeginMainMenuBar()) {
+    if (ImGui::BeginMenu("File")) {
+      if (ImGui::MenuItem("Open")) {
+
+        IGFD::FileDialogConfig config;
+        config.path = ".";
+        ImGuiFileDialog::Instance()->OpenDialog(
+            "ChooseFileDlgKey", "Choose File", ".cpp,.h,.hpp", config);
+      }
+      ImGui::EndMenu();
+    }
+    ImGui::EndMainMenuBar();
   }
 
+  // display
+  if (ImGuiFileDialog::Instance()->Display(
+          "ChooseFileDlgKey")) {               // => will show a dialog
+    if (ImGuiFileDialog::Instance()->IsOk()) { // action if OK
+      std::string filePathName = ImGuiFileDialog::Instance()->GetFilePathName();
+      std::string filePath = ImGuiFileDialog::Instance()->GetCurrentPath();
+      // action
+    }
+
+    // close
+    ImGuiFileDialog::Instance()->Close();
+  }
   ImGui::Render();
   ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 

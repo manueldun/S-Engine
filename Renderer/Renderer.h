@@ -354,7 +354,6 @@ private:
                     const VmaMemoryUsage &memoryUsage,
                     const VmaAllocationCreateFlags &allocationFlags,
                     VkBuffer &buffer, VmaAllocation &allocation);
-  void drawFrame();
 
   void drawScene();
   void updateUniformBuffer(const uint32_t &currentImage);
