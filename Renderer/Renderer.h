@@ -13,6 +13,7 @@
 #include <vk_mem_alloc.h>
 
 #include "Mesh.h"
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -260,6 +261,10 @@ public:
   void drawLabel(const std::string *label);
   void endFrame();
   void destroy();
+  void
+  addLoadSceneEvent(std::function<void(const std::string &path)> &loadFunc);
+  void addSimulationControlEvent(std::function<void()> &resumeSimulation,
+                            std::function<void()> &stopSimulation);
 
 private:
   void init();
@@ -354,7 +359,6 @@ private:
                     const VmaMemoryUsage &memoryUsage,
                     const VmaAllocationCreateFlags &allocationFlags,
                     VkBuffer &buffer, VmaAllocation &allocation);
-  void drawFrame();
 
   void drawScene();
   void updateUniformBuffer(const uint32_t &currentImage);
@@ -364,6 +368,11 @@ private:
 
   bool hasStencilComponent(VkFormat format);
 
+  std::function<void(const std::string &path)> m_loadMeshEvent;
+
+  std::function<void()> m_stopSimulation;
+  std::function<void()> m_resumeSimulation;
+  bool m_isSimulationStoped = true;
   GLFWwindow *m_window;
   VkSurfaceKHR m_surface;
   VkInstance m_instance;
@@ -424,7 +433,6 @@ private:
   std::vector<std::shared_ptr<VulkanBuffer>> m_indexBuffers;
 
   std::vector<std::shared_ptr<VulkanBuffer>> m_mvpVulkanBuffers;
-
   uint32_t findMemoryType(const uint32_t &typeFilter,
                           const VkMemoryPropertyFlags &properties);
   ImGui_ImplVulkanH_Window m_imguiWindow;

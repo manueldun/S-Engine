@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <glm/glm.hpp>
 #include <optional>
 #include <vector>
@@ -11,9 +12,9 @@ glm::vec3 farthestPointFromLine(const glm::vec3 &linePoint1,
 enum EdgeId { FIRST, SECOND, THIRD };
 class Triangle {
 public:
-  virtual ~Triangle()=default;
+  Triangle() = default;
+  virtual ~Triangle() = default;
   Triangle(const Triangle &triangle) = default;
-  const Triangle &operator=(const Triangle &triangle);
   Triangle(const glm::vec3 &vertex1, const glm::vec3 &vertex2,
            const glm::vec3 &vertex3);
   Triangle getOpositeHandednesTriangle() const;
@@ -29,10 +30,11 @@ public:
   std::array<glm::vec3, 2> getEdge(const EdgeId &edgeId);
   float getVerticesElipson() const;
   glm::vec3 getVectorWiseMax() const;
+  std::array<glm::vec3, 3> getVertexData() const;
 
 private:
-  const glm::vec3 m_vertex1;
-  const glm::vec3 m_vertex2;
-  const glm::vec3 m_vertex3;
+  const glm::vec3 m_vertex1 = glm::vec3(0.0f);
+  const glm::vec3 m_vertex2 = glm::vec3(0.0f);
+  const glm::vec3 m_vertex3 = glm::vec3(0.0f);
 };
 } // namespace ph

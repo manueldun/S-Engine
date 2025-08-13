@@ -15,6 +15,7 @@ private:
 };
 class Engine {
 public:
+  Engine();
   void loadScene(const std::string &path);
   void loop();
   bool shouldExit();

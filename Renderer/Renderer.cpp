@@ -1,6 +1,7 @@
 #include "Renderer.h"
 
 #include "GLFW/glfw3.h"
+#include "ImGuiFileDialog/ImGuiFileDialog.h"
 #include "Mesh.h"
 #include "glm/ext/vector_float3.hpp"
 #include "glm/fwd.hpp"
@@ -80,6 +81,16 @@ void Renderer::init() {
 }
 void Renderer::destroy() { cleanup(); }
 
+void Renderer::addLoadSceneEvent(
+    std::function<void(const std::string &path)> &loadFunc) {
+  m_loadMeshEvent = loadFunc;
+}
+void Renderer::addSimulationControlEvent(
+    std::function<void()> &resumeSimulation,
+    std::function<void()> &stopSimulation) {
+  m_resumeSimulation = resumeSimulation;
+  m_stopSimulation = stopSimulation;
+}
 void Renderer::initWindow() {
   glfwInit();
 
@@ -1190,11 +1201,60 @@ void Renderer::drawScene() {
   ImGui_ImplGlfw_NewFrame();
 
   ImGui::NewFrame();
-  /*ImGui::ShowDemoWindow();*/
+  // ImGui::ShowDemoWindow();
   for (const std::string *value : m_guiLabels) {
-    ImGui::LabelText("label", "%s", value->c_str());
+    ImGui::LabelText("label", "%s", "hello wordl");
+  }
+  if (ImGui::BeginMainMenuBar()) {
+    if (ImGui::BeginMenu("File")) {
+      if (ImGui::MenuItem("Open")) {
+
+        IGFD::FileDialogConfig config;
+        config.path = ".";
+        ImGuiFileDialog::Instance()->OpenDialog("ChooseFileDlgKey",
+                                                "Choose File", ".gltf", config);
+      }
+
+      ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Simulation")) {
+      bool isSimulationStopped = m_isSimulationStoped;
+      if (!isSimulationStopped) {
+        ImGui::BeginDisabled();
+      }
+      if (ImGui::MenuItem("Resume Simulation")) {
+        m_resumeSimulation();
+        m_isSimulationStoped = false;
+      }
+      if (!isSimulationStopped) {
+        ImGui::EndDisabled();
+      }
+      if (isSimulationStopped) {
+        ImGui::BeginDisabled();
+      }
+      if (ImGui::MenuItem("Stop Simulation")) {
+        m_stopSimulation();
+        m_isSimulationStoped = true;
+      }
+      if (isSimulationStopped) {
+        ImGui::EndDisabled();
+      }
+      ImGui::EndMenu();
+    }
+    ImGui::EndMainMenuBar();
   }
 
+  if (ImGuiFileDialog::Instance()->Display(
+          "ChooseFileDlgKey")) {               // => will show a dialog
+    if (ImGuiFileDialog::Instance()->IsOk()) { // action if OK
+      std::string filePathName = ImGuiFileDialog::Instance()->GetFilePathName();
+      std::string filePath = ImGuiFileDialog::Instance()->GetCurrentPath();
+      std::cout << "loading: " << filePath << filePathName << std::endl;
+      m_loadMeshEvent(filePathName);
+    }
+
+    ImGuiFileDialog::Instance()->Close();
+  }
   ImGui::Render();
   ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 

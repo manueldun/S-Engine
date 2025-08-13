@@ -24,9 +24,11 @@ executable('vulkanProgram',['main.cpp', './Renderer/Renderer.cpp',
     'imgui/backends/imgui_impl_vulkan.cpp','imgui/backends/imgui_impl_glfw.cpp',
     'imgui/imgui.cpp','./imgui/imgui_demo.cpp', './imgui/imgui_draw.cpp',
     './imgui/imgui_tables.cpp', './imgui/imgui_widgets.cpp',
+    './ImGuiFileDialog/ImGuiFileDialog.cpp',
     vertex_textured_shader_custom_target, fragment_textured_shader_custom_target,
     vertex_solid_shader_custom_target,fragment_solid_shader_custom_target],
     dependencies:[glfw_dependency,glm_dependency,vulkan_dependency,
       vma_dependency, quickhull_dependency],
     include_directories: ['imgui','imgui/backends', 'imgui/backends/vulkan',
-      './subprojects/quickhull/','./Physics/','./Renderer/','./Engine/'],)
+      './subprojects/quickhull/','./Physics/','./Renderer/','./Engine/',
+      './ImGuiFileDialog/'],)

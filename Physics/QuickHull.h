@@ -4,6 +4,7 @@
 #include <array>
 #include <glm/glm.hpp>
 #include <list>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -82,6 +83,7 @@ public:
                                        const float &epsilon);
 
   HalfEdge *m_edge;
+
 private:
 };
 class Mesh {
@@ -108,13 +110,50 @@ public:
 
 private:
 };
-struct PlanePointCollision {
-  glm::vec3 point;
-  Triangle trianglePlane;
+class Collision {
+public:
+  ~Collision() = default;
+  virtual glm::vec3 getPosition1() const = 0;
+  virtual glm::vec3 getPosition2() const = 0;
+  virtual glm::vec3 getNormal() const = 0;
+
+private:
 };
-struct EdgeEdgeCollision {
-  std::array<glm::vec3, 2> edge1;
-  std::array<glm::vec3, 2> edge2;
+class PlanePointCollision : public Collision {
+public:
+  virtual ~PlanePointCollision() = default;
+  PlanePointCollision(const glm::vec3 &point, const Triangle &trianglePlane);
+
+  glm::vec3 getPosition1() const override;
+  glm::vec3 getPosition2() const override;
+  glm::vec3 getNormal() const override;
+  const glm::vec3 m_point1;
+  const Triangle m_trianglePlane2;
+
+private:
+};
+class Witness {
+public:
+  Witness(const glm::vec3 &normal, const glm::vec3 &point);
+  const glm::vec3 normal;
+  const glm::vec3 point;
+private:
+};
+class EdgeEdgeCollision : public Collision {
+public:
+  virtual ~EdgeEdgeCollision() = default;
+  EdgeEdgeCollision(const std::array<glm::vec3, 2> &edge1,
+                    const std::array<glm::vec3, 2> &edge2,
+                    const glm::vec3 &normal);
+  glm::vec3 getPosition1() const override;
+  glm::vec3 getPosition2() const override;
+  glm::vec3 getNormal() const override;
+
+  const std::array<glm::vec3, 2> m_edge1;
+  const std::array<glm::vec3, 2> m_edge2;
+  const glm::vec3 m_normal;
+
+private:
 };
 class QuickHull {
 public:
@@ -128,15 +167,19 @@ public:
   std::vector<size_t> getIndexBuffer();
 
   void printToObj(const std::string &name);
-  std::vector<PlanePointCollision>
+
+  std::vector<std::shared_ptr<Collision>>
   getPlanePointCollisions(const glm::mat4 &thisTransform,
                           const QuickHull &ThatHull,
                           const glm::mat4 &thatTransform) const;
 
-  std::vector<EdgeEdgeCollision>
+  std::vector<std::shared_ptr<Collision>>
   getEdgeEdgeCollisions(const glm::mat4 &thisTransform,
                         const QuickHull &ThatHull,
                         const glm::mat4 &thatTransform) const;
+  std::shared_ptr<Witness> getWitness(const glm::mat4 &thisTransform,
+                                        const QuickHull &ThatHull,
+                                        const glm::mat4 &thatTransform) const;
 
 private:
   const float m_epsilon;
