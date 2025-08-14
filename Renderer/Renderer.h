@@ -407,6 +407,7 @@ private:
   std::vector<VkCommandBuffer> m_commandBuffers;
   std::vector<VkSemaphore> m_imageAvailableSemaphores;
   std::vector<VkSemaphore> m_renderFinishedSemaphores;
+  std::vector<VkSemaphore> m_submitSemaphore;
   std::vector<VkFence> m_inFlightFences;
   bool m_framebufferResized = false;
 
