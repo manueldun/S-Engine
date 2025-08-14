@@ -1163,7 +1163,7 @@ void Renderer::drawScene() {
   VkRenderPassBeginInfo renderPassBeginInfo{};
   renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   renderPassBeginInfo.renderPass = m_renderPass;
-  renderPassBeginInfo.framebuffer = m_swapChainFramebuffers[m_currentFrame];
+  renderPassBeginInfo.framebuffer = m_swapChainFramebuffers[imageIndex];
   renderPassBeginInfo.renderArea.offset = {0, 0};
   renderPassBeginInfo.renderArea.extent = swapChainExtent;
 
@@ -1274,7 +1274,7 @@ void Renderer::drawScene() {
   submitInfo.commandBufferCount = 1;
   submitInfo.pCommandBuffers = &m_commandBuffers[m_currentFrame];
   submitInfo.signalSemaphoreCount = 1;
-  submitInfo.pSignalSemaphores = &m_renderFinishedSemaphores[imageIndex];
+  submitInfo.pSignalSemaphores = &m_renderFinishedSemaphores[m_currentFrame];
 
   if (vkQueueSubmit(m_queue, 1, &submitInfo,
                     m_inFlightFences[m_currentFrame]) != VK_SUCCESS) {
@@ -1283,7 +1283,7 @@ void Renderer::drawScene() {
   VkPresentInfoKHR presentInfo{};
   presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
   presentInfo.waitSemaphoreCount = 1;
-  presentInfo.pWaitSemaphores = &m_renderFinishedSemaphores[imageIndex];
+  presentInfo.pWaitSemaphores = &m_renderFinishedSemaphores[m_currentFrame];
 
   VkSwapchainKHR swapchains[] = {m_swapchain};
   presentInfo.swapchainCount = 1;
