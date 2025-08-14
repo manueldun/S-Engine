@@ -1,4 +1,5 @@
 #pragma once
+#include "./common/Interfaces.h"
 #include "glm/fwd.hpp"
 #include "imgui_impl_vulkan.h"
 #include "stb_image.h"
@@ -249,7 +250,17 @@ public:
 
 private:
 };
+class Gui : public Subject {
+public:
+  Gui() = default;
+  Gui(const Gui &gui) = default;
+  Gui(const VkDevice &device, GLFWwindow *m_window,
+      ImGui_ImplVulkan_InitInfo &initInfo);
+  void drawGui(const VkCommandBuffer &commandBuffer);
 
+private:
+  VkDescriptorPool m_imguiDescriptorPool;
+};
 class RenderObject;
 class Renderer {
 public:
@@ -264,7 +275,8 @@ public:
   void
   addLoadSceneEvent(std::function<void(const std::string &path)> &loadFunc);
   void addSimulationControlEvent(std::function<void()> &resumeSimulation,
-                            std::function<void()> &stopSimulation);
+                                 std::function<void()> &stopSimulation);
+  void addObserver(Observer* observer);
 
 private:
   void init();
@@ -368,6 +380,7 @@ private:
 
   bool hasStencilComponent(VkFormat format);
 
+  Gui m_gui;
   std::function<void(const std::string &path)> m_loadMeshEvent;
 
   std::function<void()> m_stopSimulation;

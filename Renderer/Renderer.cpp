@@ -31,6 +31,91 @@
 #include <set>
 #include <stdexcept>
 namespace Renderer {
+;
+Gui::Gui(const VkDevice &device, GLFWwindow *m_window,
+         ImGui_ImplVulkan_InitInfo &initInfo) {
+  VkDescriptorPoolSize pool_sizes[] = {
+      {VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
+      {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
+      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000},
+      {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000},
+      {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000},
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
+      {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000}};
+
+  VkDescriptorPoolCreateInfo pool_info = {};
+  pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+  pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+  pool_info.maxSets = 1000;
+  pool_info.poolSizeCount = (uint32_t)std::size(pool_sizes);
+  pool_info.pPoolSizes = pool_sizes;
+
+  vkCreateDescriptorPool(device, &pool_info, nullptr, &m_imguiDescriptorPool);
+  // Setup Dear ImGui context
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  ImGuiIO &io = ImGui::GetIO();
+  io.ConfigFlags |=
+      ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
+  io.ConfigFlags |=
+      ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
+  // io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // IF using
+  // Docking Branch
+
+  initInfo.DescriptorPool = m_imguiDescriptorPool;
+  ImGui_ImplVulkan_Init(&initInfo);
+  ImGui_ImplGlfw_InitForVulkan(m_window, true);
+}
+
+void Gui::drawGui(const VkCommandBuffer &commandBuffer) {
+
+  ImGui_ImplVulkan_NewFrame();
+  ImGui_ImplGlfw_NewFrame();
+
+  ImGui::NewFrame();
+  // ImGui::ShowDemoWindow();
+  if (ImGui::BeginMainMenuBar()) {
+    if (ImGui::BeginMenu("File")) {
+      if (ImGui::MenuItem("Open")) {
+
+        IGFD::FileDialogConfig config;
+        config.path = ".";
+        ImGuiFileDialog::Instance()->OpenDialog("ChooseFileDlgKey",
+                                                "Choose File", ".gltf", config);
+      }
+
+      ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Simulation")) {
+      if (ImGui::MenuItem("Resume Simulation")) {
+        notify(Event::CONTINUE_SIMULATION, nullptr);
+      }
+      if (ImGui::MenuItem("Stop Simulation")) {
+        notify(Event::STOP_SIMULATION, nullptr);
+      }
+      ImGui::EndMenu();
+    }
+    ImGui::EndMainMenuBar();
+  }
+
+  if (ImGuiFileDialog::Instance()->Display(
+          "ChooseFileDlgKey")) {               // => will show a dialog
+    if (ImGuiFileDialog::Instance()->IsOk()) { // action if OK
+      std::string filePathName = ImGuiFileDialog::Instance()->GetFilePathName();
+      std::string filePath = ImGuiFileDialog::Instance()->GetCurrentPath();
+      std::cout << "loading: " << filePath << filePathName << std::endl;
+      notify(Event::OPEN_GLTF_FILE, filePathName);
+    }
+
+    ImGuiFileDialog::Instance()->Close();
+  }
+  ImGui::Render();
+  ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+}
 Renderer::Renderer() { init(); }
 std::vector<VkVertexInputBindingDescription> Vertex::getBindingDescriptions() {
   VkVertexInputBindingDescription bindingDescription{};
@@ -91,6 +176,8 @@ void Renderer::addSimulationControlEvent(
   m_resumeSimulation = resumeSimulation;
   m_stopSimulation = stopSimulation;
 }
+
+void Renderer::addObserver(Observer *observer) { m_gui.addObserver(observer); }
 void Renderer::initWindow() {
   glfwInit();
 
@@ -1057,41 +1144,6 @@ void Renderer::createSyncObjects() {
 }
 
 void Renderer::initImGui() {
-
-  VkDescriptorPoolSize pool_sizes[] = {
-      {VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
-      {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
-      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000},
-      {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000},
-      {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000},
-      {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000},
-      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000},
-      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000},
-      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
-      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
-      {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000}};
-
-  VkDescriptorPoolCreateInfo pool_info = {};
-  pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-  pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-  pool_info.maxSets = 1000;
-  pool_info.poolSizeCount = (uint32_t)std::size(pool_sizes);
-  pool_info.pPoolSizes = pool_sizes;
-
-  vkCreateDescriptorPool(m_device, &pool_info, nullptr, &m_imguiDescriptorPool);
-  // Setup Dear ImGui context
-  IMGUI_CHECKVERSION();
-  ImGui::CreateContext();
-  ImGuiIO &io = ImGui::GetIO();
-  io.ConfigFlags |=
-      ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
-  io.ConfigFlags |=
-      ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
-  // io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // IF using
-  // Docking Branch
-
-  // Setup Platform/Renderer backends
-  ImGui_ImplGlfw_InitForVulkan(m_window, true);
   ImGui_ImplVulkan_InitInfo init_info = {};
   init_info.Instance = m_instance;
   init_info.PhysicalDevice = m_physicalDevice;
@@ -1099,15 +1151,13 @@ void Renderer::initImGui() {
   init_info.QueueFamily = m_queueFamilyIndices.graphicsFamily.value();
   init_info.Queue = m_queue;
   // init_info.PipelineCache = YOUR_PIPELINE_CACHE;
-  init_info.DescriptorPool = m_imguiDescriptorPool;
   init_info.MinImageCount = m_imageCount;
   init_info.ImageCount = m_imageCount;
   init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
   init_info.CheckVkResultFn = nullptr;
 
   init_info.RenderPass = m_renderPass;
-
-  ImGui_ImplVulkan_Init(&init_info);
+  m_gui = Gui(m_device, m_window, init_info);
 }
 
 void Renderer::drawScene() {
@@ -1196,67 +1246,7 @@ void Renderer::drawScene() {
 
     vkCmdDrawIndexed(commandBuffer, drawing->numberOfVertices, 1, 0, 0, 0);
   }
-
-  ImGui_ImplVulkan_NewFrame();
-  ImGui_ImplGlfw_NewFrame();
-
-  ImGui::NewFrame();
-  // ImGui::ShowDemoWindow();
-  for (const std::string *value : m_guiLabels) {
-    ImGui::LabelText("label", "%s", "hello wordl");
-  }
-  if (ImGui::BeginMainMenuBar()) {
-    if (ImGui::BeginMenu("File")) {
-      if (ImGui::MenuItem("Open")) {
-
-        IGFD::FileDialogConfig config;
-        config.path = ".";
-        ImGuiFileDialog::Instance()->OpenDialog("ChooseFileDlgKey",
-                                                "Choose File", ".gltf", config);
-      }
-
-      ImGui::EndMenu();
-    }
-    if (ImGui::BeginMenu("Simulation")) {
-      bool isSimulationStopped = m_isSimulationStoped;
-      if (!isSimulationStopped) {
-        ImGui::BeginDisabled();
-      }
-      if (ImGui::MenuItem("Resume Simulation")) {
-        m_resumeSimulation();
-        m_isSimulationStoped = false;
-      }
-      if (!isSimulationStopped) {
-        ImGui::EndDisabled();
-      }
-      if (isSimulationStopped) {
-        ImGui::BeginDisabled();
-      }
-      if (ImGui::MenuItem("Stop Simulation")) {
-        m_stopSimulation();
-        m_isSimulationStoped = true;
-      }
-      if (isSimulationStopped) {
-        ImGui::EndDisabled();
-      }
-      ImGui::EndMenu();
-    }
-    ImGui::EndMainMenuBar();
-  }
-
-  if (ImGuiFileDialog::Instance()->Display(
-          "ChooseFileDlgKey")) {               // => will show a dialog
-    if (ImGuiFileDialog::Instance()->IsOk()) { // action if OK
-      std::string filePathName = ImGuiFileDialog::Instance()->GetFilePathName();
-      std::string filePath = ImGuiFileDialog::Instance()->GetCurrentPath();
-      std::cout << "loading: " << filePath << filePathName << std::endl;
-      m_loadMeshEvent(filePathName);
-    }
-
-    ImGuiFileDialog::Instance()->Close();
-  }
-  ImGui::Render();
-  ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+  m_gui.drawGui(commandBuffer);
 
   vkCmdEndRenderPass(commandBuffer);
   if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
@@ -1274,7 +1264,7 @@ void Renderer::drawScene() {
   submitInfo.commandBufferCount = 1;
   submitInfo.pCommandBuffers = &m_commandBuffers[m_currentFrame];
   submitInfo.signalSemaphoreCount = 1;
-  submitInfo.pSignalSemaphores = &m_renderFinishedSemaphores[m_currentFrame];
+  submitInfo.pSignalSemaphores = &m_renderFinishedSemaphores[imageIndex];
 
   if (vkQueueSubmit(m_queue, 1, &submitInfo,
                     m_inFlightFences[m_currentFrame]) != VK_SUCCESS) {
@@ -1283,7 +1273,7 @@ void Renderer::drawScene() {
   VkPresentInfoKHR presentInfo{};
   presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
   presentInfo.waitSemaphoreCount = 1;
-  presentInfo.pWaitSemaphores = &m_renderFinishedSemaphores[m_currentFrame];
+  presentInfo.pWaitSemaphores = &m_renderFinishedSemaphores[imageIndex];
 
   VkSwapchainKHR swapchains[] = {m_swapchain};
   presentInfo.swapchainCount = 1;

@@ -2,6 +2,7 @@
 #include "Mesh.h"
 #include "Physics.h"
 #include "Renderer.h"
+#include "common/Interfaces.h"
 #include "utils.h"
 #include <chrono>
 #include <functional>
@@ -25,6 +26,7 @@ Engine::Engine() {
 
   renderer.addSimulationControlEvent(resumeSimulationEvent,
                                      stopSimulationEvent);
+  renderer.addObserver(this);
 }
 void Engine::loadScene(const std::string &path) {
 
@@ -56,4 +58,21 @@ void Engine::loop() {
   renderer.endFrame();
 }
 bool Engine::shouldExit() { return renderer.shouldExit(); }
+
+void Engine::onNotify(const Event &event,
+                      const std::variant<std::string> &data) {
+  switch (event) {
+  case Event::OPEN_GLTF_FILE:
+    if (auto path = get_if<std::string>(&data)) {
+      loadScene(*path);
+      break;
+    }
+  case Event::CONTINUE_SIMULATION:
+    physicsSystem.resumeSimulation();
+    break;
+  case Event::STOP_SIMULATION:
+    physicsSystem.stopSimulation();
+    break;
+  }
+}
 } // namespace Engine

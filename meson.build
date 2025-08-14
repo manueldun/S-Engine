@@ -21,6 +21,7 @@ quickhull_dependency = quickhull_subproject.get_variable('quickhull_dep')
 executable('vulkanProgram',['main.cpp', './Renderer/Renderer.cpp',
     './Engine/Mesh.cpp','./Engine/Engine.cpp','./Physics/Physics.cpp',
     './Physics/QuickHull.cpp','./Physics/Triangle.cpp','utils.cpp',
+    './common/Interfaces.cpp',
     'imgui/backends/imgui_impl_vulkan.cpp','imgui/backends/imgui_impl_glfw.cpp',
     'imgui/imgui.cpp','./imgui/imgui_demo.cpp', './imgui/imgui_draw.cpp',
     './imgui/imgui_tables.cpp', './imgui/imgui_widgets.cpp',
@@ -29,6 +30,6 @@ executable('vulkanProgram',['main.cpp', './Renderer/Renderer.cpp',
     vertex_solid_shader_custom_target,fragment_solid_shader_custom_target],
     dependencies:[glfw_dependency,glm_dependency,vulkan_dependency,
       vma_dependency, quickhull_dependency],
-    include_directories: ['imgui','imgui/backends', 'imgui/backends/vulkan',
+    include_directories: ['./imgui/','./imgui/backends/', './imgui/backends/vulkan/',
       './subprojects/quickhull/','./Physics/','./Renderer/','./Engine/',
-      './ImGuiFileDialog/'],)
+      './ImGuiFileDialog/','./common/'],)
