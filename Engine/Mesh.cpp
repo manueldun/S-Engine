@@ -1,7 +1,8 @@
 #include "Mesh.h"
+#include "Physics.h"
 #include "glm/ext/matrix_transform.hpp"
+#include "glm/ext/vector_float3.hpp"
 #include "glm/fwd.hpp"
-#include "glm/gtc/quaternion.hpp"
 #include "glm/gtc/type_ptr.hpp"
 #include <memory>
 
@@ -33,6 +34,16 @@ MeshNode::MeshNode(const MeshData &meshData, const std::string &name,
       children(children) {}
 
 Scene::Scene(const tinygltf::Model &model) {
+  if (model.cameras.size() > 0) {
+    tinygltf::Camera camera = model.cameras.at(0);
+    if (camera.type.compare("perspective") == 0) {
+      m_projectionCamera = ProjectionCamera(
+          camera.perspective.aspectRatio, camera.perspective.yfov,
+          camera.perspective.znear, camera.perspective.zfar);
+    } else if (camera.type.compare("orthographic") == 0) {
+      assert(false);
+    }
+  }
   std::vector<Image> images;
   images.reserve(model.images.size());
   for (const tinygltf::Image &image : model.images) {
@@ -43,6 +54,30 @@ Scene::Scene(const tinygltf::Model &model) {
 
   m_meshNodes.reserve(model.nodes.size());
   for (const tinygltf::Node &node : model.nodes) {
+    if (node.mesh == -1) {
+      if (node.camera != -1) {
+
+        glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f);
+        if (node.scale.size() != 0) {
+          scale = glm::make_vec3(node.scale.data());
+        }
+        glm::quat orientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+        if (node.rotation.size() != 0) {
+          orientation = glm::make_quat(node.rotation.data());
+        }
+        glm::vec3 translation = glm::vec3(0.0f, 0.0f, 0.0f);
+        if (node.translation.size() != 0) {
+          translation = glm::make_vec3(node.translation.data());
+        }
+
+        glm::mat4 translationMat =
+            glm::translate(glm::mat4(1.0f), -translation);
+        glm::mat4 orientationMat = glm::transpose(glm::toMat4(orientation));
+        glm::mat4 scaleMat = glm::scale(glm::mat4(1.0f), scale);
+        m_viewMatrix = scaleMat * orientationMat * translationMat;
+      }
+      break;
+    }
     tinygltf::Mesh mesh = model.meshes[node.mesh];
 
     std::string name = node.name;
@@ -179,4 +214,6 @@ Scene::Scene(const tinygltf::Model &model) {
 std::vector<std::shared_ptr<MeshNode>> Scene::getMeshNodes() const {
   return m_meshNodes;
 }
+glm::mat4 Scene::getCameraViewMatrix() const { return m_viewMatrix; }
+ProjectionCamera &Scene::getProjectionCamera() { return m_projectionCamera; }
 } // namespace Engine

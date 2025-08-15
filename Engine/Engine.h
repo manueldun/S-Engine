@@ -1,6 +1,6 @@
 #pragma once
 
-#include "./common/Interfaces.h"
+#include "Interfaces.h"
 #include "Physics.h"
 #include "Renderer.h"
 #include <string>
@@ -22,7 +22,7 @@ public:
   void loop();
   bool shouldExit();
   void onNotify(const Event &event,
-                const std::variant<std::string> &data) override;
+                const std::variant<void *, std::string> &data) override;
 
 private:
   std::vector<Entity> entities;

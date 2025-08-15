@@ -5,9 +5,10 @@ void Subject::addObserver(Observer *observer) {
 }
 
 void Subject::notify(const Event &event,
-                     const std::variant<std::string> &data) {
+                     const std::variant<void *, std::string> &data) {
 
   for (Observer *observer : m_observers) {
     observer->onNotify(event, data);
   }
 }
+
