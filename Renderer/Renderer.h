@@ -1,5 +1,6 @@
 #pragma once
-#include "./common/Interfaces.h"
+#include "Interfaces.h"
+#include "Camera.h"
 #include "glm/fwd.hpp"
 #include "imgui_impl_vulkan.h"
 #include "stb_image.h"
@@ -38,7 +39,26 @@ struct Vertex {
   static std::vector<VkVertexInputAttributeDescription>
   getAttributeDescriptions();
 };
+class CameraController {
+public:
+  void init(const glm::mat4 &viewMatrix,
+            const ProjectionCamera &projectionCamera);
+  void startDragging();
+  void startRotating();
+  void stopDragging();
+  void stopRotating();
+  void zoom(const float &scroll);
+  void mouseMotion(const float &xpos, const float &ypos);
+  glm::mat4 getVieMatrix();
+  ProjectionCamera &getProjectionCamera();
 
+private:
+  bool m_isRotating = false;
+  bool m_isDragging = false;
+  glm::vec3 m_lookAtPosition;
+  glm::vec3 m_lookFromPosition;
+  ProjectionCamera m_projectionCamera;
+};
 class VulkanBuffer {
 public:
   VulkanBuffer(const VulkanBuffer &buffer) = default;
@@ -210,7 +230,9 @@ public:
   virtual void setTranform(const glm::mat4 &transform);
   virtual glm::mat4 getTranform() const;
   virtual void bind(const VkCommandBuffer &cmd, const int currentImage,
-                    const VkExtent2D &swapChainExtent) const = 0;
+                    const VkExtent2D &swapChainExtent,
+                    const glm::mat4 &viewMatrix,
+                    const glm::mat4 &projectionMatrix) const = 0;
   const std::shared_ptr<Pipeline> pipeline;
   const int numberOfVertices;
   const std::vector<std::shared_ptr<VulkanBuffer>> vertexVulkanBuffers;
@@ -226,7 +248,9 @@ class SolidColorDrawing : public Drawing {
 public:
   virtual ~SolidColorDrawing() = default;
   virtual void bind(const VkCommandBuffer &cmd, const int currentImage,
-                    const VkExtent2D &swapChainExtent) const override;
+                    const VkExtent2D &swapChainExtent,
+                    const glm::mat4 &viewMatrix,
+                    const glm::mat4 &projectionMatrix) const override;
   const std::weak_ptr<VkDescriptorSet> colorDescriptorSet;
 
 private:
@@ -245,7 +269,9 @@ public:
       const std::shared_ptr<VkDescriptorSet> &textureDescriptorSet);
 
   virtual void bind(const VkCommandBuffer &cmd, const int currentImage,
-                    const VkExtent2D &swapChainExtent) const override;
+                    const VkExtent2D &swapChainExtent,
+                    const glm::mat4 &viewMatrix,
+                    const glm::mat4 &projectionMatrix) const override;
   const std::shared_ptr<VkDescriptorSet> textureDescriptorSet;
 
 private:
@@ -267,21 +293,27 @@ public:
   friend class RenderObject;
   Renderer();
   std::shared_ptr<Drawing> loadModel(const Engine::MeshNode &meshNode);
+  void setCameraMatrix(const glm::mat4 &viewMatrix,
+                       const ProjectionCamera &projection);
   bool shouldExit();
   void draw(const std::shared_ptr<Drawing> &drawing);
   void drawLabel(const std::string *label);
   void endFrame();
   void destroy();
-  void
-  addLoadSceneEvent(std::function<void(const std::string &path)> &loadFunc);
-  void addSimulationControlEvent(std::function<void()> &resumeSimulation,
-                                 std::function<void()> &stopSimulation);
-  void addObserver(Observer* observer);
+
+  void addObserver(Observer *observer);
 
 private:
   void init();
 
   void initWindow();
+
+  static void mouseButtonCallback(GLFWwindow *window, int button, int action,
+                                  int mods);
+  static void cursorPositionCallback(GLFWwindow *window, double xpos,
+                                     double ypos);
+  static void scrollCallback(GLFWwindow *window, double xoffset,
+                             double yoffset);
 
   void initVulkan();
 
@@ -381,10 +413,7 @@ private:
   bool hasStencilComponent(VkFormat format);
 
   Gui m_gui;
-  std::function<void(const std::string &path)> m_loadMeshEvent;
-
-  std::function<void()> m_stopSimulation;
-  std::function<void()> m_resumeSimulation;
+  CameraController m_cameraController;
   bool m_isSimulationStoped = true;
   GLFWwindow *m_window;
   VkSurfaceKHR m_surface;

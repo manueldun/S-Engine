@@ -1,10 +1,12 @@
 #pragma once
 
+#include "Camera.h"
+#include "glm/ext/matrix_transform.hpp"
 #include "glm/glm.hpp"
-#include <glm/gtc/quaternion.hpp>
 #include "tiny_gltf.h"
 #include <array>
 #include <cstdint>
+#include <glm/gtc/quaternion.hpp>
 #include <memory>
 #include <string>
 #include <vector>
@@ -75,8 +77,14 @@ class Scene {
 public:
   Scene(const tinygltf::Model &model);
   std::vector<std::shared_ptr<MeshNode>> getMeshNodes() const;
+  glm::mat4 getCameraViewMatrix() const;
+  ProjectionCamera &getProjectionCamera();
 
 private:
   std::vector<std::shared_ptr<MeshNode>> m_meshNodes;
+  glm::mat4 m_viewMatrix =
+      glm::lookAt(glm::vec3(10.0f, 10.0f, 10.0f), glm::vec3(0.0f, 0.0f, 0.0f),
+                  glm::vec3(0.0f, 0.0f, 1.0f));
+  ProjectionCamera m_projectionCamera;
 };
 } // namespace Engine

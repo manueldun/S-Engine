@@ -14,9 +14,6 @@ Entity::Entity(const std::shared_ptr<Renderer::Drawing> &drawing,
 void Entity::update() { drawing->setTranform(body.getTransform()); }
 
 Engine::Engine() {
-  std::function<void(const std::string &path)> loadSceneEvent =
-      [this](const std::string &path) { this->loadScene(path); };
-  renderer.addLoadSceneEvent(loadSceneEvent);
   std::function<void()> resumeSimulationEvent = [this]() {
     this->physicsSystem.resumeSimulation();
   };
@@ -24,19 +21,19 @@ Engine::Engine() {
     this->physicsSystem.stopSimulation();
   };
 
-  renderer.addSimulationControlEvent(resumeSimulationEvent,
-                                     stopSimulationEvent);
   renderer.addObserver(this);
 }
 void Engine::loadScene(const std::string &path) {
 
   const tinygltf::Model &sceneModel = util::loadGltfFile(path);
-  const Scene scene(sceneModel);
+  Scene scene(sceneModel);
   for (const std::shared_ptr<MeshNode> &meshNode : scene.getMeshNodes()) {
     auto drawing = renderer.loadModel(*meshNode);
     auto body = physicsSystem.addMesh(*meshNode);
     entities.push_back(Entity(drawing, body));
   }
+  renderer.setCameraMatrix(scene.getCameraViewMatrix(),
+                           scene.getProjectionCamera());
 }
 void Engine::loop() {
 
@@ -60,7 +57,7 @@ void Engine::loop() {
 bool Engine::shouldExit() { return renderer.shouldExit(); }
 
 void Engine::onNotify(const Event &event,
-                      const std::variant<std::string> &data) {
+                      const std::variant<void *, std::string> &data) {
   switch (event) {
   case Event::OPEN_GLTF_FILE:
     if (auto path = get_if<std::string>(&data)) {

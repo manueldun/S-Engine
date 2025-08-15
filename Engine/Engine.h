@@ -22,7 +22,7 @@ public:
   void loop();
   bool shouldExit();
   void onNotify(const Event &event,
-                const std::variant<std::string> &data) override;
+                const std::variant<void *, std::string> &data) override;
 
 private:
   std::vector<Entity> entities;

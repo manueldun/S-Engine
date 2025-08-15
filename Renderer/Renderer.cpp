@@ -5,12 +5,17 @@
 #include "Mesh.h"
 #include "glm/ext/vector_float3.hpp"
 #include "glm/fwd.hpp"
+#include "glm/geometric.hpp"
+#define GLM_ENABLE_EXPERIMENTAL
+#include "Camera.h"
+#include "glm/gtx/intersect.hpp"
+#include "glm/gtx/quaternion.hpp"
+#include "glm/gtx/rotate_vector.hpp"
+#include "glm/matrix.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_vulkan.h"
 #include <memory>
-#define GLM_ENABLE_EXPERIMENTAL
-#include "glm/gtx/quaternion.hpp"
 
 #include <array>
 #include <glm/ext/matrix_transform.hpp>
@@ -151,6 +156,58 @@ Vertex::getAttributeDescriptions() {
   return attributeDescriptions;
 }
 
+void CameraController::init(const glm::mat4 &viewMatrix,
+                            const ProjectionCamera &projectionCamera) {
+  const float defaultDistance = 10.0f;
+  const glm::mat4 inverse = glm::inverse(viewMatrix);
+  const glm::vec3 direction = -inverse[2];
+  const glm::vec3 eye = inverse[3];
+  m_lookAtPosition = eye + direction * defaultDistance;
+  m_lookFromPosition = eye;
+  m_projectionCamera = projectionCamera;
+}
+void CameraController::startDragging() { m_isDragging = true; }
+void CameraController::startRotating() { m_isRotating = true; }
+void CameraController::stopDragging() { m_isDragging = false; }
+void CameraController::stopRotating() { m_isRotating = false; }
+void CameraController::zoom(const float &scroll) {
+  glm::vec3 lookDirection =
+      glm::normalize(m_lookAtPosition - m_lookFromPosition);
+  m_lookFromPosition += lookDirection * scroll;
+  float distance = glm::distance(m_lookAtPosition, m_lookFromPosition);
+  if (distance < 1.0f) {
+
+    m_lookAtPosition += lookDirection * scroll;
+  }
+}
+void CameraController::mouseMotion(const float &xpos, const float &ypos) {
+  if (m_isRotating) {
+    const glm::vec3 eyeToCenter = m_lookFromPosition - m_lookAtPosition;
+    const glm::vec3 side =
+        glm::normalize(glm::cross(glm::vec3(0.0f, 0.0f, 1.0f), -eyeToCenter));
+    const glm::vec3 rotatedEyeY =
+        glm::rotate(eyeToCenter, (xpos) * 0.01f, glm::vec3(0.0f, 0.0f, 1.0f));
+    const glm::vec3 rotatedEye = glm::rotate(rotatedEyeY, (ypos) * 0.01f, side);
+    m_lookFromPosition = rotatedEye + m_lookAtPosition;
+  } else if (m_isDragging) {
+    const glm::vec3 eyeToCenter = m_lookFromPosition - m_lookAtPosition;
+    const glm::vec3 side =
+        glm::normalize(glm::cross(glm::vec3(0.0f, 0.0f, 1.0f), -eyeToCenter));
+    const glm::vec3 up = glm::normalize(glm::cross(side, eyeToCenter));
+    m_lookAtPosition += side * xpos * 0.01f;
+    m_lookAtPosition += up * ypos * 0.01f;
+    m_lookFromPosition += side * xpos * 0.01f;
+    m_lookFromPosition += up * ypos * 0.01f;
+  }
+}
+glm::mat4 CameraController::getVieMatrix() {
+
+  return glm::lookAt(m_lookFromPosition, m_lookAtPosition,
+                     glm::vec3(0.0f, 0.0f, 1.0f));
+}
+ProjectionCamera &CameraController::getProjectionCamera() {
+  return m_projectionCamera;
+}
 VulkanBuffer::VulkanBuffer(const VkBuffer &buffer,
                            const VmaAllocation &allocation,
                            void *const bufferPointer)
@@ -165,17 +222,6 @@ void Renderer::init() {
   initImGui();
 }
 void Renderer::destroy() { cleanup(); }
-
-void Renderer::addLoadSceneEvent(
-    std::function<void(const std::string &path)> &loadFunc) {
-  m_loadMeshEvent = loadFunc;
-}
-void Renderer::addSimulationControlEvent(
-    std::function<void()> &resumeSimulation,
-    std::function<void()> &stopSimulation) {
-  m_resumeSimulation = resumeSimulation;
-  m_stopSimulation = stopSimulation;
-}
 
 void Renderer::addObserver(Observer *observer) { m_gui.addObserver(observer); }
 void Renderer::initWindow() {
@@ -192,12 +238,70 @@ void Renderer::initWindow() {
 
   glfwSetWindowUserPointer(m_window, this);
   glfwSetFramebufferSizeCallback(m_window, framebufferResizeCallback);
+
+  glfwSetCursorPosCallback(m_window, cursorPositionCallback);
+  glfwSetScrollCallback(m_window, scrollCallback);
+  glfwSetMouseButtonCallback(m_window, mouseButtonCallback);
+}
+void Renderer::mouseButtonCallback(GLFWwindow *window, int button, int action,
+                                   int mods) {
+
+  auto app = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
+  {
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS &&
+        mods != GLFW_MOD_ALT) {
+      if (glfwRawMouseMotionSupported()) {
+        glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+      }
+      app->m_cameraController.startRotating();
+      // glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    }
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE) {
+      if (glfwRawMouseMotionSupported()) {
+        glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_FALSE);
+      }
+      app->m_cameraController.stopRotating();
+      app->m_cameraController.stopDragging();
+      // glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    }
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS &&
+        mods == GLFW_MOD_ALT) {
+      if (glfwRawMouseMotionSupported()) {
+        glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+      }
+      app->m_cameraController.startDragging();
+      // glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    }
+  }
+}
+
+void Renderer::cursorPositionCallback(GLFWwindow *window, double xpos,
+                                      double ypos) {
+  static float previousXpos = xpos;
+  static float previousYpos = ypos;
+  auto app = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
+  {
+    app->m_cameraController.mouseMotion(xpos - previousXpos,
+                                        ypos - previousYpos);
+  }
+  previousXpos = xpos;
+  previousYpos = ypos;
+}
+void Renderer::scrollCallback(GLFWwindow *window, double xoffset,
+                              double yoffset) {
+
+  auto app = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
+  {
+    app->m_cameraController.zoom(yoffset);
+  }
 }
 
 void Renderer::framebufferResizeCallback(GLFWwindow *window, int width,
                                          int height) {
   auto app = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
   app->m_framebufferResized = true;
+  app->m_cameraController.getProjectionCamera().aspectRatio =
+      static_cast<float>(width) / static_cast<float>(height);
 }
 bool Renderer::checkValidationLayerSupport() const {
   uint32_t layerCount;
@@ -1228,7 +1332,11 @@ void Renderer::drawScene() {
   vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo,
                        VK_SUBPASS_CONTENTS_INLINE);
   for (const std::shared_ptr<Drawing> &drawing : m_toDraw) {
-    drawing->bind(commandBuffer, m_currentFrame, swapChainExtent);
+    glm::mat4 viewMatrix = m_cameraController.getVieMatrix();
+    ProjectionCamera &projectionMatrix =
+        m_cameraController.getProjectionCamera();
+    drawing->bind(commandBuffer, m_currentFrame, swapChainExtent, viewMatrix,
+                  projectionMatrix.getProjectionMatrix());
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
@@ -1543,7 +1651,9 @@ TexturedDrawing::TexturedDrawing(
       textureDescriptorSet(textureDescriptorSet) {}
 
 void TexturedDrawing::bind(const VkCommandBuffer &cmd, const int currentImage,
-                           const VkExtent2D &swapChainExtent) const {
+                           const VkExtent2D &swapChainExtent,
+                           const glm::mat4 &viewMatrix,
+                           const glm::mat4 &projectionMatrix) const {
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipeline->getPipeline());
   std::vector<VkBuffer> vertexBuffers;
@@ -1565,12 +1675,8 @@ void TexturedDrawing::bind(const VkCommandBuffer &cmd, const int currentImage,
                           &*mvpDescriptorSet.at(currentImage), 0, nullptr);
   UniformBufferObject mvpObject;
   mvpObject.model = getTranform();
-  mvpObject.view =
-      glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
-                  glm::vec3(0.0f, 0.0f, 1.0f));
-  mvpObject.projection = glm::perspective(
-      glm::radians(45.0f),
-      swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
+  mvpObject.view = viewMatrix;
+  mvpObject.projection = projectionMatrix;
   mvpObject.projection[1][1] *= -1.0f;
   UniformBufferObject *mvpBufferPtr = static_cast<UniformBufferObject *>(
       mvpBuffers.at(currentImage)->bufferPointer);
@@ -1937,6 +2043,11 @@ std::shared_ptr<Drawing> Renderer::loadModel(const Engine::MeshNode &meshNode) {
       std::make_shared<VkDescriptorPool>(mvpDescriptorPool), mvpDescriptorSets,
       mvpBuffers, imageDescriptorSetPtr);
   return texture;
+}
+
+void Renderer::setCameraMatrix(const glm::mat4 &viewMatrix,
+                               const ProjectionCamera &projection) {
+  m_cameraController.init(viewMatrix, projection);
 }
 Drawble::Drawble(const BufferData &bufferData, const Pipeline &pipelineTextured,
                  const Pipeline &pipelineSolid, const uint32_t indexOffset,
