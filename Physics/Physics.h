@@ -41,11 +41,13 @@ public:
   calculateTimeOfContact(const RigidBody &rigidBody,
                          const std::shared_ptr<Collision> collision) const;
   const glm::mat4 getTransform() const;
+  bool queryWitness(RigidBody &thatRigidBody);
 
   const QuickHull m_hull;
 
 private:
   const glm::quat getStandardOrientation() const;
+  std::shared_ptr<Witness> m_witness;
   const float m_mass;
   const glm::mat3 m_Ibody;
   const glm::mat3 m_IbodyInv;
@@ -91,6 +93,7 @@ public:
 
   void stopSimulation();
   void resumeSimulation();
+
 private:
   bool m_isStopped = true;
   std::vector<RigidBody> m_rigidBodies;

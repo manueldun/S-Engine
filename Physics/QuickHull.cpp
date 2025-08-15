@@ -1,7 +1,9 @@
 #include "QuickHull.h"
 #include "Triangle.h"
 #include "glm/common.hpp"
+#include "glm/gtc/epsilon.hpp"
 #include <iostream>
+#include <limits>
 #include <map>
 #include <sys/wait.h>
 
@@ -391,14 +393,14 @@ QuickHull::getEdgeEdgeCollisions(const glm::mat4 &thisTransform,
   return collisions;
 }
 std::shared_ptr<Witness>
-QuickHull::getWitness(const glm::mat4 &thisTransform, const QuickHull &ThatHull,
+QuickHull::getWitness(const glm::mat4 &thisTransform, const QuickHull &thatHull,
                       const glm::mat4 &thatTransform) const {
   std::shared_ptr<Witness> witness;
   for (HalfEdgeFace *face : m_hullHalEdgeFacesPtr) {
     bool isTowardsPoint = true;
     glm::vec3 normal;
     glm::vec3 worldSpaceVertex;
-    for (const HalfEdgeVertex &vertex : ThatHull.m_halfEdgeVertices) {
+    for (const HalfEdgeVertex &vertex : thatHull.m_halfEdgeVertices) {
       worldSpaceVertex = thatTransform * glm::vec4(vertex.position, 1.0f);
       Triangle triangle = face->getTrianglePlane().transform(thisTransform);
       if (!triangle.isTowards(worldSpaceVertex)) {
@@ -412,7 +414,7 @@ QuickHull::getWitness(const glm::mat4 &thisTransform, const QuickHull &ThatHull,
     }
   }
   for (HalfEdge *edge1 : m_hullHalfEdgesPtr) {
-    for (HalfEdge *edge2 : ThatHull.m_hullHalfEdgesPtr) {
+    for (HalfEdge *edge2 : thatHull.m_hullHalfEdgesPtr) {
       glm::vec3 edge1point1 =
           thisTransform * glm::vec4(edge1->m_tail->position, 1.0f);
       glm::vec3 edge1point2 =
@@ -423,9 +425,46 @@ QuickHull::getWitness(const glm::mat4 &thisTransform, const QuickHull &ThatHull,
           thatTransform * glm::vec4(edge2->m_next->m_tail->position, 1.0f);
       glm::vec3 edge1vec = edge1point1 - edge1point2;
       glm::vec3 edge2vec = edge2point1 - edge2point2;
-      glm::vec3 normal = glm::normalize(glm::cross(edge1vec, edge2vec));
-      for (const HalfEdgeVertex &heVertex : m_hullVertices) {
-        glm::vec3 vertex = glm::vec4(heVertex.position, 1.0f);
+      glm::vec3 cross = glm::cross(edge1vec, edge2vec);
+      glm::bvec3 isEqual = glm::epsilonEqual(
+          glm::vec3(0.0f), cross, std::numeric_limits<float>::epsilon());
+      if (glm::all(isEqual)) {
+        break;
+      }
+      glm::vec3 normal = glm::normalize(cross);
+      bool isNormalTowards1 =
+          glm::dot(normal, edge1point1 - edge2point1) > 0.0f;
+      glm::vec3 worldSpaceVertex;
+      const QuickHull *hull;
+      if (isNormalTowards1) {
+        hull = this;
+      } else {
+        hull = &thatHull;
+      }
+      bool isTowardsPoint = true;
+      for (const HalfEdgeVertex &hwVertex : hull->m_halfEdgeVertices) {
+        worldSpaceVertex = thisTransform * glm::vec4(hwVertex.position, 1.0f);
+        if (isNormalTowards1) {
+
+          glm::vec3 vertexDiff = worldSpaceVertex - edge2point1;
+          if (glm::dot(normal, vertexDiff) > 0.0f) {
+            isTowardsPoint = false;
+            break;
+          }
+        } else {
+          glm::vec3 vertexDiff = worldSpaceVertex - edge1point1;
+          if (glm::dot(normal, vertexDiff) > 0.0f) {
+            isTowardsPoint = false;
+            break;
+          }
+        }
+      }
+      if (isTowardsPoint) {
+        if (isNormalTowards1) {
+          return std::make_shared<Witness>(normal, edge2point1);
+        } else {
+          return std::make_shared<Witness>(normal, edge1point1);
+        }
       }
     }
   }

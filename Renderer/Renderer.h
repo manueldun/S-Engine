@@ -405,7 +405,6 @@ private:
                     VkBuffer &buffer, VmaAllocation &allocation);
 
   void drawScene();
-  void updateUniformBuffer(const uint32_t &currentImage);
   void cleanupSwapChain();
   void recreateSwapChain();
   void cleanup();

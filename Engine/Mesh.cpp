@@ -203,7 +203,10 @@ Scene::Scene(const tinygltf::Model &model) {
     }
     glm::vec3 translation = glm::vec3(0.0f, 0.0f, 0.0f);
     if (node.translation.size() != 0) {
-      translation = glm::make_vec3(node.translation.data());
+      glm::vec3 filePosition = glm::make_vec3(node.translation.data());
+      translation.x = filePosition.x;
+      translation.y = filePosition.z;
+      translation.z = filePosition.y;
     }
     assert(node.matrix.size() == 0);
     m_meshNodes.push_back(std::make_shared<MeshNode>(

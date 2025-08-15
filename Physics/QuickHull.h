@@ -178,7 +178,7 @@ public:
                         const QuickHull &ThatHull,
                         const glm::mat4 &thatTransform) const;
   std::shared_ptr<Witness> getWitness(const glm::mat4 &thisTransform,
-                                        const QuickHull &ThatHull,
+                                        const QuickHull &thatHull,
                                         const glm::mat4 &thatTransform) const;
 
 private:

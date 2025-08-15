@@ -3,6 +3,7 @@
 #include "glm/detail/qualifier.hpp"
 #include "glm/exponential.hpp"
 #include "glm/ext/matrix_transform.hpp"
+#include "glm/ext/quaternion_geometric.hpp"
 #include "glm/ext/quaternion_transform.hpp"
 #include "glm/gtc/quaternion.hpp"
 #include <iostream>
@@ -29,7 +30,7 @@ const State RigidBody::getDerivative(const glm::vec3 &forces,
   State derivativeState = {};
   derivativeState.m_velocity = getVelocity();
   derivativeState.m_angularVelocity = getAngularVelocity();
-  derivativeState.m_forces = forces + glm::vec3(0.0f, -1.0f, 0.0f) *
+  derivativeState.m_forces = forces + glm::vec3(0.0f, 0.0f, -1.0f) *
                                           RigidBodySystem::c_gravity * m_mass;
   derivativeState.m_torques = torques;
   return derivativeState;
@@ -38,7 +39,10 @@ void RigidBody::eulerStep(const float &delta) {
   State derivativeState = getDerivative(m_force, m_torque);
   if (m_mass != 0.0f) {
     m_position = m_position + delta * derivativeState.m_velocity;
-    m_orientation = (delta * derivativeState.m_angularVelocity) * m_orientation;
+    glm::vec4 w(0.0f, derivativeState.m_angularVelocity);
+    glm::quat orientationDerivative = glm::quat(0.5f * w * m_orientation);
+    m_orientation = (orientationDerivative * delta) * m_orientation;
+    m_orientation = glm::normalize(m_orientation);
     m_linearMomentum = m_linearMomentum + delta * derivativeState.m_forces;
     m_angularMomentum = m_angularMomentum + delta * derivativeState.m_torques;
     m_time += delta;
@@ -154,9 +158,19 @@ float RigidBody::calculateTimeOfContact(
 const glm::mat4 RigidBody::getTransform() const {
 
   const glm::quat orientation = getOrientation();
-  return glm::translate(glm::mat4_cast(orientation), getPosition());
+  const glm::mat4 translation = glm::translate(glm::mat4(1.0f), getPosition());
+  return translation * glm::mat4_cast(orientation);
 }
 
+bool RigidBody::queryWitness(RigidBody &thatRigidBody) {
+  std::shared_ptr<Witness> witness = m_hull.getWitness(
+      getTransform(), thatRigidBody.m_hull, thatRigidBody.getTransform());
+  if (witness.get() == nullptr) {
+    return false;
+  }
+  m_witness = witness;
+  return true;
+}
 const glm::quat RigidBody::getStandardOrientation() const {
   return glm::rotate(glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::radians(90.0f),
                      glm::vec3(1.0f, 0.0f, 0.0f));
@@ -189,11 +203,9 @@ void RigidBodySystem::eulerStep(const float &delta) {
 
       for (size_t j = i + 1; j < m_rigidBodies.size(); j++) {
         if (i != j) {
-          std::optional<float> penetrationTime =
-              m_rigidBodies[i].getInterPenetration(m_rigidBodies[j]);
-          if (penetrationTime.has_value()) {
-            std::cout << "penetration Time: " << penetrationTime.value()
-                      << std::endl;
+          bool witnesExists = m_rigidBodies[i].queryWitness(m_rigidBodies[j]);
+          if (!witnesExists) {
+            std::cout << "Collision: " << std::endl;
             stopSimulation();
           }
         }
@@ -250,9 +262,7 @@ const glm::vec3 RigidBodySystem::getPosition(const uint32_t index) {
   return m_rigidBodies[index].getPosition();
 }
 const glm::mat4 RigidBodySystem::getTransform(const uint32_t index) {
-  const glm::quat orientation = m_rigidBodies[index].getOrientation();
-  return glm::translate(glm::mat4_cast(orientation),
-                        m_rigidBodies[index].getPosition());
+  return m_rigidBodies[index].getTransform();
 }
 
 void RigidBodySystem::stopSimulation() { m_isStopped = true; }
